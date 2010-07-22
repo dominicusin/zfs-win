@@ -132,6 +132,11 @@ namespace ZFS
 					continue;
 				}
 
+				// << 9 or vdev->ashift? 
+				//
+				// on-disk spec says: "All sizes are stored as the number of 512 byte sectors (minus one) needed to
+				// represent the size of this block.", but is it still true or outdated?
+
 				size_t psize = ((size_t)bp->psize + 1) << 9;
 				size_t lsize = ((size_t)bp->lsize + 1) << 9;
 
