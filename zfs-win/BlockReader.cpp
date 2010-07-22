@@ -146,8 +146,6 @@ namespace ZFS
 						return true;
 					}
 				}
-
-				return true;
 			}
 		}
 
