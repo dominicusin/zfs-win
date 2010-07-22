@@ -52,6 +52,11 @@ struct cksum_t
 		word[2] = c;
 		word[3] = d;
 	}
+
+	bool operator == (cksum_t& c) const
+	{
+		return ((word[0] ^ c.word[0]) | (word[1] ^ c.word[1]) | (word[2] ^ c.word[2]) | (word[3] ^ c.word[3])) == 0;
+	}
 };
 
 /*
@@ -85,8 +90,8 @@ struct blkptr_t
 		{
 			uint16_t lsize;
 			uint16_t psize;
-			uint8_t comp;
-			uint8_t chksum;
+			uint8_t comp_type;
+			uint8_t cksum_type;
 			uint8_t type;
 			struct {uint8_t lvl:5; uint8_t x:1; uint8_t d:1; uint8_t b:1;};
 		};
@@ -101,7 +106,7 @@ struct blkptr_t
 	cksum_t cksum; /* 256-bit checksum */
 };
 
-#define	ZEC_MAGIC 0x210da7ab10c7a11ULL
+#define	ZEC_MAGIC 0x0210da7ab10c7a11ULL
 
 struct zio_eck_t
 {

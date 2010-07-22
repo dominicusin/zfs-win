@@ -25,6 +25,7 @@
 
 #include "stdafx.h"
 #include "Compress.h"
+#include "../zlib/zlib.h"
 
 #define NBBY 8
 #define	MATCH_BITS	6
@@ -152,4 +153,135 @@ int lzjb_decompress(void* s_start, void* d_start, size_t s_len, size_t d_len)
 	}
 
 	return 0;
+}
+
+size_t gzip_compress(void* s_start, void* d_start, size_t s_len, size_t d_len, int n)
+{
+	size_t dstlen = d_len;
+
+	ASSERT(d_len <= s_len);
+
+	uLongf len = dstlen;
+
+	if(compress2((Bytef*)d_start, &len, (Bytef*)s_start, s_len, n) != Z_OK)
+	{
+		if(d_len != s_len)
+		{
+			return s_len;
+		}
+
+		memcpy(s_start, d_start, s_len);
+
+		return s_len;
+	}
+
+	dstlen = len;
+
+	return dstlen;
+}
+
+int gzip_decompress(void* s_start, void* d_start, size_t s_len, size_t d_len)
+{
+	size_t dstlen = d_len;
+
+	ASSERT(d_len >= s_len);
+
+	uLongf len = dstlen;
+
+	if(uncompress((Bytef*)d_start, &len, (Bytef*)s_start, s_len) != Z_OK)
+	{
+		return -1;
+	}
+
+	dstlen = len;
+
+	return 0;
+}
+
+/*
+ * Zero-length encoding.  This is a fast and simple algorithm to eliminate
+ * runs of zeroes.  Each chunk of compressed data begins with a length byte, b.
+ * If b < n (where n is the compression parameter) then the next b + 1 bytes
+ * are literal values.  If b >= n then the next (256 - b + 1) bytes are zero.
+ */
+
+size_t zle_compress(void* s_start, void* d_start, size_t s_len, size_t d_len, int n)
+{
+	uint8_t* src = (uint8_t*)s_start;
+	uint8_t* dst = (uint8_t*)d_start;
+	uint8_t* s_end = src + s_len;
+	uint8_t* d_end = dst + d_len;
+
+	while(src < s_end && dst < d_end - 1)
+	{
+		uint8_t* first = src;
+		uint8_t* len = dst++;
+
+		if(src[0] == 0)
+		{
+			uint8_t* last = src + (256 - n);
+
+			while(src < std::min<uint8_t*>(last, s_end) && src[0] == 0)
+			{
+				src++;
+			}
+
+			*len = src - first - 1 + n;
+		}
+		else
+		{
+			uint8_t* last = src + n;
+			
+			if(d_end - dst < n)
+			{
+				break;
+			}
+
+			while(src < std::min<uint8_t*>(last, s_end) - 1 && (src[0] | src[1]))
+			{
+				*dst++ = *src++;
+			}
+
+			if(src[0])
+			{
+				*dst++ = *src++;
+			}
+
+			*len = src - first - 1;
+		}
+	}
+
+	return src == s_end ? dst - (uint8_t*)d_start : s_len;
+}
+
+int zle_decompress(void* s_start, void* d_start, size_t s_len, size_t d_len, int n)
+{
+	uint8_t* src = (uint8_t*)s_start;
+	uint8_t* dst = (uint8_t*)d_start;
+	uint8_t* s_end = src + s_len;
+	uint8_t* d_end = dst + d_len;
+
+	while(src < s_end && dst < d_end)
+	{
+		int len = 1 + *src++;
+
+		if(len <= n)
+		{
+			while(len-- != 0)
+			{
+				*dst++ = *src++;
+			}
+		}
+		else
+		{
+			len -= n;
+		
+			while(len-- != 0)
+			{
+				*dst++ = 0;
+			}
+		}
+	}
+
+	return dst == d_end ? 0 : -1;
 }

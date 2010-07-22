@@ -24,8 +24,19 @@
 
 namespace ZFS
 {
-	ZapObject::ZapObject(std::vector<uint8_t>& buff)
+	ZapObject::ZapObject()
 	{
+	}
+
+	ZapObject::~ZapObject()
+	{
+		Clear();
+	}
+
+	void ZapObject::Parse(std::vector<uint8_t>& buff)
+	{
+		Clear();
+
 		if(buff.size() >= sizeof(uint64_t))
 		{
 			uint64_t* ptr = (uint64_t*)buff.data();
@@ -35,12 +46,14 @@ namespace ZFS
 		}
 	}
 
-	ZapObject::~ZapObject()
+	void ZapObject::Clear()
 	{
 		for(auto i = begin(); i != end(); i++)
 		{
 			delete i->second;
 		}
+
+		clear();
 	}
 
 	bool ZapObject::Lookup(const char* name, uint64_t& value)
@@ -107,7 +120,7 @@ namespace ZFS
 	{
 		size_t half_size = buff.size() / 2; // first half wasted ???
 
-		zap_phys_t* zap = (zap_phys_t*)buff.data();
+		zap_phys_t* zap = (zap_phys_t*)buff.data(); // TODO: zap->ptrtbl ???
 		zap_leaf_phys_t* leaf = (zap_leaf_phys_t*)(buff.data() + half_size);
 
 		zap_leaf_entry_t* e = (zap_leaf_entry_t*)(uint8_t*)&leaf->hash[half_size / 32];
@@ -156,7 +169,7 @@ namespace ZFS
 		uint8_t* ptr = buff.data();
 		size_t size = buff.size();
 
-		while(index != 0xffff)
+		while(index != 0xffff && size > 0)
 		{
 			zap_leaf_array_t* l = (zap_leaf_array_t*)&e[index];
 

@@ -35,11 +35,11 @@ int _tmain(int argc, _TCHAR* argv[])
 		paths.push_back(argv[i]);
 	}
 	*/
-	
+	/*
 	const char* name = "mpool";
 
 	paths.push_back(L"D:\\Virtual Machines\\ZFSVM\\ZFSVM1-flat.vmdk");
-	/*
+	
 	paths.push_back(L"D:\\Virtual Machines\\ZFSVM\\ZFSVM2-flat.vmdk");
 	paths.push_back(L"D:\\Virtual Machines\\ZFSVM\\ZFSVM3-flat.vmdk");
 	paths.push_back(L"D:\\Virtual Machines\\ZFSVM\\ZFSVM4-flat.vmdk");
@@ -56,11 +56,11 @@ int _tmain(int argc, _TCHAR* argv[])
 	paths.push_back(L"\\\\.\\PhysicalDrive3");
 	paths.push_back(L"\\\\.\\PhysicalDrive4");
 	*/
-	/*
+	/**/
 	const char* name = "rpool";
 
 	paths.push_back(L"D:\\Virtual Machines\\OpenSolaris\\OpenSolaris-flat.vmdk");	
-	*/
+	
 	ZFS::Pool p;
 
 	if(!p.Open(name, paths))
@@ -96,12 +96,10 @@ int _tmain(int argc, _TCHAR* argv[])
 
 					if(dn[1].type == DMU_OT_OBJECT_DIRECTORY)
 					{
-						std::vector<uint8_t> buff;
+						ZFS::ZapObject zap;
 
-						if(p.Read(buff, dn[1].blkptr, dn[1].nblkptr))
+						if(p.Read(zap, dn[1].blkptr, dn[1].nblkptr))
 						{
-							ZFS::ZapObject zap(buff);
-
 							uint64_t index;
 
 							if(zap.Lookup("root_dataset", index))
@@ -158,12 +156,10 @@ int _tmain(int argc, _TCHAR* argv[])
 
 										if(dn[1].type == DMU_OT_MASTER_NODE)
 										{
-											std::vector<uint8_t> buff;
+											ZFS::ZapObject zap;
 
-											if(p.Read(buff, dn[1].blkptr, dn[1].nblkptr))
+											if(p.Read(zap, dn[1].blkptr, dn[1].nblkptr))
 											{
-												ZFS::ZapObject zap(buff);
-
 												uint64_t index;
 
 												if(zap.Lookup("ROOT", index)) // NOTE: the ROOT dataset may not contain too many files, don't be surprised

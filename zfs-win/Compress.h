@@ -27,5 +27,9 @@
 
 extern size_t lzjb_compress(void* s_start, void* d_start, size_t s_len, size_t d_len);
 extern int lzjb_decompress(void* s_start, void* d_start, size_t s_len, size_t d_len);
+extern size_t gzip_compress(void* s_start, void* d_start, size_t s_len, size_t d_len, int n);
+extern int gzip_decompress(void* s_start, void* d_start, size_t s_len, size_t d_len);
+extern size_t zle_compress(void* s_start, void* d_start, size_t s_len, size_t d_len, int n);
+extern int zle_decompress(void* s_start, void* d_start, size_t s_len, size_t d_len, int n);
 
 // TODO: gzip, zle

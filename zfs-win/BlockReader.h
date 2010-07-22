@@ -35,6 +35,11 @@ namespace ZFS
 		void Insert(blkptr_t* bp, size_t count);
 		bool Read(blkptr_t* bp, std::vector<uint8_t>& buff);
 
+		// these should be part of some utility class:
+
+		static bool Verify(std::vector<uint8_t>& buff, uint8_t cksum_type, cksum_t& cksum);
+		static bool Decompress(std::vector<uint8_t>& src, std::vector<uint8_t>& dst, size_t lsize, uint8_t comp_type);
+
 	public:
 		BlockReader(Pool* pool, blkptr_t* bp, size_t count);
 		virtual ~BlockReader();

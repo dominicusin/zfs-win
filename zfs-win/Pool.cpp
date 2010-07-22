@@ -129,4 +129,18 @@ namespace ZFS
 
 		return r.ReadToEnd(buff);
 	}
+
+	bool Pool::Read(ZapObject& zap, blkptr_t* bp, size_t count)
+	{
+		std::vector<uint8_t> buff;
+
+		if(Read(buff, bp, count))
+		{
+			zap.Parse(buff);
+
+			return true;
+		}
+
+		return false;
+	}
 }
