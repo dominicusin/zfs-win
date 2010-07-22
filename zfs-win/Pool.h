@@ -23,8 +23,6 @@
 
 #include "zfs.h"
 #include "Device.h"
-#include "ZapObject.h"
-#include "ObjectSet.h"
 
 namespace ZFS
 {
@@ -44,7 +42,5 @@ namespace ZFS
 		void Close();
 		
 		bool Read(std::vector<uint8_t>& buff, blkptr_t* bp, size_t count);
-		bool Read(ObjectSet& objset, blkptr_t* bp, size_t count);
-		bool Read(ZapObject& zap, blkptr_t* bp, size_t count);
 	};
 }

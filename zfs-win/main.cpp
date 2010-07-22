@@ -22,6 +22,7 @@
 #include "stdafx.h"
 #include "Pool.h"
 #include "Device.h"
+#include "ObjectSet.h"
 #include "ZapObject.h"
 
 int _tmain(int argc, _TCHAR* argv[])
@@ -72,47 +73,27 @@ int _tmain(int argc, _TCHAR* argv[])
 
 	ZFS::ObjectSet os;
 
-	if(p.Read(os, &dev->m_active->rootbp, 1))
+	if(os.Read(p, &dev->m_active->rootbp, 1))
 	{
 		ASSERT(os.count() > 2);
 
-		dnode_phys_t* root_dataset = NULL;
-
-		ASSERT(os[1]->type == DMU_OT_OBJECT_DIRECTORY);
-
-		if(os[1]->type == DMU_OT_OBJECT_DIRECTORY)
-		{
-			ZFS::ZapObject zap;
-
-			if(p.Read(zap, os[1]->blkptr, os[1]->nblkptr))
-			{
-				uint64_t index;
-
-				if(zap.Lookup("root_dataset", index))
-				{
-					if(index < os.count() && os[index]->type == DMU_OT_DSL_DIR)
-					{
-						root_dataset = os[index];
-					}
-				}
-			}
-		}
+		dnode_phys_t* root_dataset = os["root_dataset"];
 
 		dnode_phys_t* head_dataset = NULL;
 
-		if(root_dataset != NULL)
+		if(root_dataset != NULL && root_dataset->type == DMU_OT_DSL_DIR)
 		{
 			dsl_dir_phys_t* dir = (dsl_dir_phys_t*)root_dataset->bonus;
 
 			size_t index = (size_t)dir->head_dataset_obj;
 
-			if(index < os.count() && os[index]->type == DMU_OT_DSL_DATASET)
+			if(index < os.count())
 			{
 				head_dataset = os[index];
 			}
 		}
 
-		if(head_dataset != NULL)
+		if(head_dataset != NULL && head_dataset->type == DMU_OT_DSL_DATASET)
 		{
 			dsl_dataset_phys_t* ds = (dsl_dataset_phys_t*)head_dataset->bonus;
 
@@ -120,35 +101,11 @@ int _tmain(int argc, _TCHAR* argv[])
 			{
 				ZFS::ObjectSet os;
 
-				if(p.Read(os, &ds->bp, 1))
+				if(os.Read(p, &ds->bp, 1))
 				{
-					dnode_phys_t* root = NULL;
+					dnode_phys_t* root = os["ROOT"];
 
-					ASSERT(os[1]->type == DMU_OT_MASTER_NODE);
-
-					if(os[1]->type == DMU_OT_MASTER_NODE)
-					{
-						ZFS::ZapObject zap;
-
-						if(p.Read(zap, os[1]->blkptr, os[1]->nblkptr))
-						{
-							uint64_t index;
-
-							if(zap.Lookup("ROOT", index)) // NOTE: the ROOT dataset may not contain too many files, don't be surprised
-							{
-								if(index < os.count() && os[index]->type == DMU_OT_DIRECTORY_CONTENTS)
-								{
-									root = os[index];
-								}
-								else
-								{
-									ASSERT(0);
-								}
-							}
-						}
-					}
-
-					if(root != NULL)
+					if(root != NULL && root->type == DMU_OT_DIRECTORY_CONTENTS)
 					{
 						znode_phys_t* node = (znode_phys_t*)root->bonus;
 

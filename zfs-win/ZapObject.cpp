@@ -30,30 +30,32 @@ namespace ZFS
 
 	ZapObject::~ZapObject()
 	{
-		Clear();
+		RemoveAll();
 	}
 
-	void ZapObject::Parse(std::vector<uint8_t>& buff)
+	bool ZapObject::Read(Pool& pool, blkptr_t* bp, size_t count)
 	{
-		Clear();
+		RemoveAll();
 
-		if(buff.size() >= sizeof(uint64_t))
+		std::vector<uint8_t> buff;
+
+		if(pool.Read(buff, bp, count))
 		{
-			uint64_t* ptr = (uint64_t*)buff.data();
-
-			if(*ptr == ZBT_MICRO) ParseMicro(buff);
-			else if(*ptr == ZBT_HEADER) ParseFat(buff);
+			if(buff.size() >= sizeof(uint64_t))
+			{
+				switch(*(uint64_t*)buff.data())
+				{
+				case ZBT_MICRO:
+					ParseMicro(buff);
+					return true;
+				case ZBT_HEADER:
+					ParseFat(buff);
+					return true;
+				}
+			}
 		}
-	}
 
-	void ZapObject::Clear()
-	{
-		for(auto i = begin(); i != end(); i++)
-		{
-			delete i->second;
-		}
-
-		clear();
+		return false;
 	}
 
 	bool ZapObject::Lookup(const char* name, uint64_t& value)
@@ -85,6 +87,16 @@ namespace ZFS
 		}
 
 		return false;
+	}
+
+	void ZapObject::RemoveAll()
+	{
+		for(auto i = begin(); i != end(); i++)
+		{
+			delete i->second;
+		}
+
+		clear();
 	}
 
 	void ZapObject::ParseMicro(std::vector<uint8_t>& buff)
