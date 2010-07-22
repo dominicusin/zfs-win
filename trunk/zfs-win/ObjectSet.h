@@ -1,6 +1,7 @@
 #pragma once
 
-#include "zfs.h"
+#include "Pool.h"
+#include "ZapObject.h"
 
 namespace ZFS
 {
@@ -9,15 +10,17 @@ namespace ZFS
 		std::vector<uint8_t> m_objset;
 		std::vector<uint8_t> m_dnode;
 		size_t m_dnode_count;
+		ZapObject m_objdir;
 
 	public:
 		ObjectSet();
 		virtual ~ObjectSet();
 
-		bool Init(std::vector<uint8_t>& objset, std::vector<uint8_t>& dnode);
+		bool Read(Pool& pool, blkptr_t* bp, size_t count);
 
-		objset_phys_t* operator -> () {ASSERT(m_objset.size() >= sizeof(objset_phys_t)); return (objset_phys_t*)m_objset.data();}
-		dnode_phys_t* operator [] (size_t index) {ASSERT(index < m_dnode_count); return (dnode_phys_t*)m_dnode.data() + index;}
-		size_t count() {return m_dnode_count;}
+		objset_phys_t* operator -> ();
+		dnode_phys_t* operator [] (size_t index);
+		dnode_phys_t* operator [] (const char* s);
+		size_t count();
 	};
 }

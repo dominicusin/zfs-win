@@ -21,12 +21,13 @@
 
 #pragma once
 
-#include "zfs.h"
+#include "Pool.h"
 
 namespace ZFS
 {
 	class ZapObject : protected std::map<std::string, std::vector<uint8_t>*>
 	{
+		void RemoveAll();
 		void ParseMicro(std::vector<uint8_t>& buff);
 		void ParseFat(std::vector<uint8_t>& buff);
 		bool ParseArray(std::vector<uint8_t>& buff, zap_leaf_entry_t* e, uint16_t index);
@@ -35,8 +36,7 @@ namespace ZFS
 		ZapObject();
 		virtual ~ZapObject();
 
-		void Parse(std::vector<uint8_t>& buff);
-		void Clear();
+		bool Read(Pool& pool, blkptr_t* bp, size_t count);
 
 		bool Lookup(const char* name, uint64_t& value);
 		bool Lookup(const char* name, std::string& value);
