@@ -21,6 +21,7 @@
 
 #include "stdafx.h"
 #include "BlockReader.h"
+#include "Hash.h"
 #include "Compress.h"
 
 namespace ZFS
@@ -131,28 +132,19 @@ namespace ZFS
 					continue;
 				}
 
-				size_t psize = (size_t)(bp->psize + 1) << 9;
-				size_t lsize = (size_t)(bp->lsize + 1) << 9;
+				size_t psize = ((size_t)bp->psize + 1) << 9;
+				size_t lsize = ((size_t)bp->lsize + 1) << 9;
 
 				std::vector<uint8_t> src(psize);
 
 				vdev->Read(src, psize, addr->offset << 9);
 
-				// TODO: verify bp->chksum
-
-				switch(bp->comp)
+				if(Verify(src, bp->cksum_type, bp->cksum))
 				{
-				case ZIO_COMPRESS_ON:
-				case ZIO_COMPRESS_LZJB:
-					dst.resize(lsize);
-					lzjb_decompress(src.data(), dst.data(), psize, lsize);
-					break;
-				case ZIO_COMPRESS_OFF:
-					dst.swap(src);
-					break;
-				default: // TODO: gzip, zle
-					ASSERT(0);
-					return false;
+					if(Decompress(src, dst, lsize, bp->comp_type))
+					{
+						return true;
+					}
 				}
 
 				return true;
@@ -160,5 +152,74 @@ namespace ZFS
 		}
 
 		return false;
+	}
+
+	bool BlockReader::Verify(std::vector<uint8_t>& buff, uint8_t cksum_type, cksum_t& cksum)
+	{
+		cksum_t c;
+
+		memset(&c, 0, sizeof(c));
+
+		switch(cksum_type)
+		{
+		case ZIO_CHECKSUM_OFF:
+			return true;
+		case ZIO_CHECKSUM_ON: // ???
+		case ZIO_CHECKSUM_ZILOG:
+		case ZIO_CHECKSUM_FLETCHER_2:
+			fletcher_2_native(buff.data(), buff.size(), &c);
+			break;
+		case ZIO_CHECKSUM_ZILOG2:
+		case ZIO_CHECKSUM_FLETCHER_4:
+			fletcher_4_native(buff.data(), buff.size(), &c);
+			break;
+		case ZIO_CHECKSUM_LABEL:
+		case ZIO_CHECKSUM_GANG_HEADER:
+		case ZIO_CHECKSUM_SHA256:
+			sha256(buff.data(), buff.size(), &c); // TESTME
+			break;
+		default:
+			ASSERT(0);
+			return false;
+		}
+
+		ASSERT(cksum == c);
+
+		return cksum == c;
+	}
+
+	bool BlockReader::Decompress(std::vector<uint8_t>& src, std::vector<uint8_t>& dst, size_t lsize, uint8_t comp_type)
+	{
+		switch(comp_type)
+		{
+		case ZIO_COMPRESS_ON: // ???
+		case ZIO_COMPRESS_LZJB:
+			dst.resize(lsize);
+			lzjb_decompress(src.data(), dst.data(), src.size(), lsize);
+			break;
+		case ZIO_COMPRESS_OFF:
+		case ZIO_COMPRESS_EMPTY: // ???
+			dst.swap(src);
+			break;
+		case ZIO_COMPRESS_GZIP_1:
+		case ZIO_COMPRESS_GZIP_2:
+		case ZIO_COMPRESS_GZIP_3:
+		case ZIO_COMPRESS_GZIP_4:
+		case ZIO_COMPRESS_GZIP_5:
+		case ZIO_COMPRESS_GZIP_6:
+		case ZIO_COMPRESS_GZIP_7:
+		case ZIO_COMPRESS_GZIP_8:
+		case ZIO_COMPRESS_GZIP_9:
+			gzip_decompress(src.data(), dst.data(), src.size(), lsize); // TESTME
+			break;
+		case ZIO_COMPRESS_ZLE:
+			zle_decompress(src.data(), dst.data(), src.size(), lsize, 64); // TESTME
+			break;
+		default:
+			ASSERT(0);
+			return false;
+		}
+
+		return true;
 	}
 }

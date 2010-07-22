@@ -21,6 +21,7 @@
 
 #include "stdafx.h"
 #include "Device.h"
+#include "Hash.h"
 
 namespace ZFS
 {
@@ -118,7 +119,7 @@ namespace ZFS
 				{
 					vdev.dev->Seek(rm.m_col[i].offset + 0x400000);
 					
-					if(!vdev.dev->Read(p, rm.m_col[i].size) != rm.m_col[i].size)
+					if(vdev.dev->Read(p, rm.m_col[i].size) != rm.m_col[i].size)
 					{
 						return false;
 					}
@@ -247,7 +248,12 @@ namespace ZFS
 
 		Read(m_label, sizeof(vdev_label_t));
 
-		// TODO: verify m_label->vdev_phys.zbt.chksum
+		if(m_label->vdev_phys.zbt.magic != ZEC_MAGIC)
+		{
+			return false;
+		}
+
+		// TODO: verify m_label->vdev_phys.zbt.chksum (but which part of m_label does it hash ???)
 
 		if(!m_desc.Init(m_label->vdev_phys))
 		{
@@ -305,9 +311,12 @@ namespace ZFS
 
 		li.QuadPart = m_start + pos;
 
-		SetFilePointerEx(m_handle, li, &li2, FILE_BEGIN);
+		if(SetFilePointerEx(m_handle, li, &li2, FILE_BEGIN))
+		{
+			return li2.QuadPart;
+		}
 
-		return li.QuadPart;
+		return (uint64_t)-1;
 	}
 
 	size_t Device::Read(void* buff, uint64_t size)

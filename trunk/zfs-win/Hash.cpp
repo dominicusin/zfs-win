@@ -245,3 +245,33 @@ void fletcher_4_incremental_byteswap(const void* buf, uint64_t size, cksum_t* zc
 
 	zcp->set(a, b, c, d);
 }
+
+#include <wincrypt.h>
+
+void sha256(const void* buf, uint64_t size, cksum_t* zcp)
+{
+    HCRYPTPROV hCryptProv; 
+    HCRYPTHASH hHash; 
+
+    if(CryptAcquireContext(&hCryptProv, NULL, NULL, PROV_RSA_AES, CRYPT_VERIFYCONTEXT)) 
+	{
+		if(CryptCreateHash(hCryptProv, CALG_SHA_256, 0, 0, &hHash)) 
+		{
+			if(CryptHashData(hHash, (BYTE*)buf, (DWORD)size, 0))
+			{
+			    DWORD dwHashLen = sizeof(cksum_t);
+
+				if(CryptGetHashParam(hHash, HP_HASHVAL, (BYTE*)zcp, &dwHashLen, 0))
+				{
+					zcp->word[0] = BSWAP_64(zcp->word[0]);
+					zcp->word[1] = BSWAP_64(zcp->word[1]);
+					zcp->word[2] = BSWAP_64(zcp->word[2]);
+					zcp->word[3] = BSWAP_64(zcp->word[3]);
+				}
+			}
+		}
+    }
+
+	CryptDestroyHash(hHash); 
+    CryptReleaseContext(hCryptProv, 0); 
+}
