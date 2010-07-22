@@ -29,6 +29,7 @@
 #include "targetver.h"
 
 #include <windows.h>
+#include <wincrypt.h>
 
 #include <stdio.h>
 #include <stdint.h>

@@ -70,130 +70,97 @@ int _tmain(int argc, _TCHAR* argv[])
 
 	ZFS::Device* dev = p.m_devs.front();
 
-	if(dev->m_active->rootbp.type == DMU_OT_OBJSET)
+	ZFS::ObjectSet os;
+
+	if(p.Read(os, &dev->m_active->rootbp, 1))
 	{
-		std::vector<uint8_t> buff;
+		ASSERT(os.count() > 2);
 
-		if(p.Read(buff, &dev->m_active->rootbp, 1))
+		dnode_phys_t* root_dataset = NULL;
+
+		ASSERT(os[1]->type == DMU_OT_OBJECT_DIRECTORY);
+
+		if(os[1]->type == DMU_OT_OBJECT_DIRECTORY)
 		{
-			objset_phys_t* os = (objset_phys_t*)buff.data();
+			ZFS::ZapObject zap;
 
-			if(os->type == DMU_OST_META && os->meta_dnode.type == DMU_OT_DNODE)
+			if(p.Read(zap, os[1]->blkptr, os[1]->nblkptr))
 			{
-				std::vector<uint8_t> buff;
+				uint64_t index;
 
-				if(p.Read(buff, os->meta_dnode.blkptr, os->meta_dnode.nblkptr))
+				if(zap.Lookup("root_dataset", index))
 				{
-					dnode_phys_t* dn = (dnode_phys_t*)buff.data();
-					
-					size_t count = buff.size() / sizeof(dnode_phys_t);
+					if(index < os.count() && os[index]->type == DMU_OT_DSL_DIR)
+					{
+						root_dataset = os[index];
+					}
+				}
+			}
+		}
 
-					ASSERT(count > 2);
+		dnode_phys_t* head_dataset = NULL;
 
-					dnode_phys_t* root_dataset = NULL;
+		if(root_dataset != NULL)
+		{
+			dsl_dir_phys_t* dir = (dsl_dir_phys_t*)root_dataset->bonus;
 
-					ASSERT(dn[1].type == DMU_OT_OBJECT_DIRECTORY);
+			size_t index = (size_t)dir->head_dataset_obj;
 
-					if(dn[1].type == DMU_OT_OBJECT_DIRECTORY)
+			if(index < os.count() && os[index]->type == DMU_OT_DSL_DATASET)
+			{
+				head_dataset = os[index];
+			}
+		}
+
+		if(head_dataset != NULL)
+		{
+			dsl_dataset_phys_t* ds = (dsl_dataset_phys_t*)head_dataset->bonus;
+
+			if(ds->bp.type == DMU_OT_OBJSET)
+			{
+				ZFS::ObjectSet os;
+
+				if(p.Read(os, &ds->bp, 1))
+				{
+					dnode_phys_t* root = NULL;
+
+					ASSERT(os[1]->type == DMU_OT_MASTER_NODE);
+
+					if(os[1]->type == DMU_OT_MASTER_NODE)
 					{
 						ZFS::ZapObject zap;
 
-						if(p.Read(zap, dn[1].blkptr, dn[1].nblkptr))
+						if(p.Read(zap, os[1]->blkptr, os[1]->nblkptr))
 						{
 							uint64_t index;
 
-							if(zap.Lookup("root_dataset", index))
+							if(zap.Lookup("ROOT", index)) // NOTE: the ROOT dataset may not contain too many files, don't be surprised
 							{
-								if(index < count && dn[index].type == DMU_OT_DSL_DIR)
+								if(index < os.count() && os[index]->type == DMU_OT_DIRECTORY_CONTENTS)
 								{
-									root_dataset = &dn[index];
+									root = os[index];
+								}
+								else
+								{
+									ASSERT(0);
 								}
 							}
 						}
 					}
 
-					dnode_phys_t* head_dataset = NULL;
-
-					if(root_dataset != NULL)
+					if(root != NULL)
 					{
-						dsl_dir_phys_t* dir = (dsl_dir_phys_t*)root_dataset->bonus;
+						znode_phys_t* node = (znode_phys_t*)root->bonus;
 
-						size_t index = (size_t)dir->head_dataset_obj;
+						std::vector<uint8_t> buff;
 
-						if(index < count && dn[index].type == DMU_OT_DSL_DATASET)
+						if(p.Read(buff, root->blkptr, root->nblkptr))
 						{
-							head_dataset = &dn[index];
-						}
-					}
+							mzap_phys_t* mzap = (mzap_phys_t*)buff.data();
 
-					if(head_dataset != NULL)
-					{
-						dsl_dataset_phys_t* ds = (dsl_dataset_phys_t*)head_dataset->bonus;
+							// finally, arrived at the root directory
 
-						if(ds->bp.type == DMU_OT_OBJSET)
-						{
-							std::vector<uint8_t> buff;
-
-							if(p.Read(buff, &ds->bp, 1))
-							{
-								objset_phys_t* os = (objset_phys_t*)buff.data();
-
-								if(os->type == DMU_OST_ZFS && os->meta_dnode.type == DMU_OT_DNODE)
-								{
-									std::vector<uint8_t> buff;
-
-									if(p.Read(buff, os->meta_dnode.blkptr, os->meta_dnode.nblkptr))
-									{
-										dnode_phys_t* dn = (dnode_phys_t*)buff.data();
-
-										size_t count = buff.size() / sizeof(dnode_phys_t);
-
-										ASSERT(count > 2);
-
-										dnode_phys_t* root = NULL;
-
-										ASSERT(dn[1].type == DMU_OT_MASTER_NODE);
-
-										if(dn[1].type == DMU_OT_MASTER_NODE)
-										{
-											ZFS::ZapObject zap;
-
-											if(p.Read(zap, dn[1].blkptr, dn[1].nblkptr))
-											{
-												uint64_t index;
-
-												if(zap.Lookup("ROOT", index)) // NOTE: the ROOT dataset may not contain too many files, don't be surprised
-												{
-													if(index < count && dn[index].type == DMU_OT_DIRECTORY_CONTENTS)
-													{
-														root = &dn[index];
-													}
-													else
-													{
-														ASSERT(0);
-													}
-												}
-											}
-										}
-
-										if(root != NULL)
-										{
-											znode_phys_t* node = (znode_phys_t*)root->bonus;
-
-											std::vector<uint8_t> buff;
-
-											if(p.Read(buff, root->blkptr, root->nblkptr))
-											{
-												mzap_phys_t* mzap = (mzap_phys_t*)buff.data();
-
-												// finally, arrived at the root directory
-
-												int i = 0;
-											}
-										}
-									}
-								}
-							}
+							int i = 0;
 						}
 					}
 				}

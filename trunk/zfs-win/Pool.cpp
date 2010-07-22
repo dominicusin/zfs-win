@@ -130,6 +130,28 @@ namespace ZFS
 		return r.ReadToEnd(buff);
 	}
 
+	bool Pool::Read(ObjectSet& objset, blkptr_t* bp, size_t count)
+	{
+		ASSERT(bp->type == DMU_OT_OBJSET);
+
+		std::vector<uint8_t> buff[2];
+
+		if(Read(buff[0], bp, count))
+		{
+			objset_phys_t* os = (objset_phys_t*)buff[0].data();
+
+			if(os->meta_dnode.type == DMU_OT_DNODE)
+			{
+				if(Read(buff[1], os->meta_dnode.blkptr, os->meta_dnode.nblkptr))
+				{
+					return objset.Init(buff[0], buff[1]);
+				}
+			}
+		}
+
+		return false;
+	}
+
 	bool Pool::Read(ZapObject& zap, blkptr_t* bp, size_t count)
 	{
 		std::vector<uint8_t> buff;

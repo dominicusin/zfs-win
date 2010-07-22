@@ -75,6 +75,7 @@ namespace ZFS
 		HANDLE m_handle;
 		uint64_t m_start;
 		uint64_t m_size;
+		uint64_t m_bytes;
 		vdev_label_t* m_label;
 		uberblock_t* m_active;
 

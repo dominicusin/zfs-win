@@ -179,6 +179,7 @@ namespace ZFS
 		: m_handle(NULL)
 		, m_start(0)
 		, m_size(0)
+		, m_bytes(0)
 		, m_label(NULL)
 		, m_active(NULL)
 	{
@@ -301,6 +302,7 @@ namespace ZFS
 
 		m_start = 0;
 		m_size = 0;
+		m_bytes = 0;
 
 		m_active = NULL;
 	}
@@ -324,6 +326,8 @@ namespace ZFS
 		DWORD read = 0;
 
 		ReadFile(m_handle, buff, (DWORD)size, &read, NULL);
+
+		m_bytes += read;
 
 		return (size_t)read;
 	}
