@@ -21,9 +21,8 @@
 
 #include "stdafx.h"
 #include "Pool.h"
-#include "Device.h"
-#include "ObjectSet.h"
-#include "ZapObject.h"
+#include "DataSet.h"
+#include <time.h>
 
 int _tmain(int argc, _TCHAR* argv[])
 {
@@ -75,48 +74,36 @@ int _tmain(int argc, _TCHAR* argv[])
 
 	if(os.Read(p, &dev->m_active->rootbp, 1))
 	{
-		ASSERT(os.count() > 2);
-
-		dnode_phys_t* root_dataset = os["root_dataset"];
-
-		dnode_phys_t* head_dataset = NULL;
-
-		if(root_dataset != NULL && root_dataset->type == DMU_OT_DSL_DIR)
+		ZFS::DataSet ds;
+		
+		if(ds.Read(p, os))
 		{
-			dsl_dir_phys_t* dir = (dsl_dir_phys_t*)root_dataset->bonus;
+			std::list<ZFS::DataSet*> mpl;
 
-			size_t index = (size_t)dir->head_dataset_obj;
+			ds.GetMountPoints(mpl);
 
-			if(index < os.count())
+			for(auto i = mpl.begin(); i != mpl.end(); i++)
 			{
-				head_dataset = os[index];
-			}
-		}
+				if((*i)->m_mountpoint != "/") continue;
 
-		if(head_dataset != NULL && head_dataset->type == DMU_OT_DSL_DATASET)
-		{
-			dsl_dataset_phys_t* ds = (dsl_dataset_phys_t*)head_dataset->bonus;
-
-			if(ds->bp.type == DMU_OT_OBJSET)
-			{
 				ZFS::ObjectSet os;
 
-				if(os.Read(p, &ds->bp, 1))
+				clock_t t = clock();
+
+				if(os.Read(p, &(*i)->m_dataset->bp, 1)) // <-- this can be huge (all files and directories), compression helps a bit
 				{
+					printf("%d %d\n", clock() - t, os.count());
+
 					dnode_phys_t* root = os["ROOT"];
 
 					if(root != NULL && root->type == DMU_OT_DIRECTORY_CONTENTS)
 					{
-						znode_phys_t* node = (znode_phys_t*)root->bonus;
+						znode_phys_t* node = (znode_phys_t*)root->bonus();
 
-						std::vector<uint8_t> buff;
+						ZFS::ZapObject zap;
 
-						if(p.Read(buff, root->blkptr, root->nblkptr))
+						if(zap.Read(p, root->blkptr, root->nblkptr))
 						{
-							mzap_phys_t* mzap = (mzap_phys_t*)buff.data();
-
-							// finally, arrived at the root directory
-
 							int i = 0;
 						}
 					}

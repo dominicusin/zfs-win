@@ -65,6 +65,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="BlockReader.h" />
+    <ClInclude Include="DataSet.h" />
     <ClInclude Include="Device.h" />
     <ClInclude Include="Compress.h" />
     <ClInclude Include="Hash.h" />
@@ -78,6 +79,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="BlockReader.cpp" />
+    <ClCompile Include="DataSet.cpp" />
     <ClCompile Include="Device.cpp" />
     <ClCompile Include="Compress.cpp" />
     <ClCompile Include="NameValueList.cpp" />

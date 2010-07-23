@@ -81,8 +81,25 @@ namespace ZFS
 
 		if(i != end())
 		{
-			value = std::string((char*)i->second->data(), i->second->size());
-			
+			std::vector<uint8_t>* buff = i->second;
+
+			if(!buff->empty())
+			{
+				char* ptr = (char*)buff->data();
+				size_t size = buff->size();
+
+				while(size > 0 && ptr[size - 1] == 0) 
+				{
+					size--;
+				}
+
+				value = std::string(ptr, size);
+			}
+			else
+			{
+				value.empty();
+			}
+
 			return true;
 		}
 
@@ -130,49 +147,66 @@ namespace ZFS
 
 	void ZapObject::ParseFat(std::vector<uint8_t>& buff)
 	{
-		size_t half_size = buff.size() / 2; // first half wasted ???
+		// NOTE: not sure about this, the documentation is outdated, 0x4000 granularity seems to work
+
+		ASSERT(buff.size() >= 0x8000 && (buff.size() & 0x3fff) == 0);
+
+		if(buff.size() < 0x8000) 
+		{
+			return;
+		}
 
 		zap_phys_t* zap = (zap_phys_t*)buff.data(); // TODO: zap->ptrtbl ???
-		zap_leaf_phys_t* leaf = (zap_leaf_phys_t*)(buff.data() + half_size);
 
-		zap_leaf_entry_t* e = (zap_leaf_entry_t*)(uint8_t*)&leaf->hash[half_size / 32];
-		zap_leaf_entry_t* e_end = (zap_leaf_entry_t*)(buff.data() + buff.size());
+		size_t n = buff.size() / 0x4000 - 1;
+		size_t m = 0x4000 - offsetof(zap_leaf_phys_t, hash[0x4000 / 32]);
 
-		for(size_t i = 0, n = e_end - e; i < n; i++)
+		uint8_t* ptr = buff.data() + 0x4000;
+
+		for(size_t i = 0; i < n; i++, ptr += 0x4000)
 		{
-			if(e[i].type != ZAP_CHUNK_ENTRY)
+			zap_leaf_phys_t* leaf = (zap_leaf_phys_t*)ptr;
+
+			ASSERT(leaf->block_type == ZBT_LEAF);
+
+			zap_leaf_entry_t* e = (zap_leaf_entry_t*)&leaf->hash[0x4000 / 32];
+
+			for(size_t i = 0, n = m / sizeof(zap_leaf_entry_t); i < n; i++)
 			{
-				continue;
-			}
+				if(e[i].type != ZAP_CHUNK_ENTRY)
+				{
+					continue;
+				}
 
-			std::vector<uint8_t> name(e[i].name_numints);
+				std::vector<uint8_t> name(e[i].name_numints);
 
-			if(!ParseArray(name, e, e[i].name_chunk) || name.empty())
-			{
-				continue;
-			}
+				if(!ParseArray(name, e, e[i].name_chunk) || name.empty())
+				{
+					continue;
+				}
 
-			std::vector<uint8_t>* value = new std::vector<uint8_t>(e[i].value_numints * e[i].value_intlen);
+				std::vector<uint8_t>* value = new std::vector<uint8_t>(e[i].value_numints * e[i].value_intlen);
 
-			if(!ParseArray(*value, e, e[i].value_chunk))
-			{
-				delete value;
+				if(!ParseArray(*value, e, e[i].value_chunk))
+				{
+					delete value;
 
-				continue;
-			}
+					continue;
+				}
 
-			std::string s((char*)name.data(), name.size() - 1);
+				std::string s((char*)name.data(), name.size() - 1);
 
-			auto j = find(s);
+				auto j = find(s);
 
-			if(j != end())
-			{
-				delete j->second;
+				if(j != end())
+				{
+					delete j->second;
 
-				erase(j);
-			}
+					erase(j);
+				}
 			
-			(*this)[s] = value;
+				(*this)[s] = value;
+			}
 		}
 	}
 

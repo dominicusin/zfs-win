@@ -97,18 +97,24 @@ namespace ZFS
 	{
 		if(m_bpl.empty())
 		{
-			for(size_t i = 0; i < count && bp[i].type != DMU_OT_NONE; i++)
+			for(size_t i = 0; i < count; i++)
 			{
-				m_bpl.push_back(new blkptr_t(bp[i]));
+				if(bp[i].type != DMU_OT_NONE)
+				{
+					m_bpl.push_back(new blkptr_t(bp[i]));
+				}
 			}
 		}
 		else
 		{
 			std::list<blkptr_t*> l;
 
-			for(size_t i = 0; i < count && bp[i].type != DMU_OT_NONE; i++)
+			for(size_t i = 0; i < count; i++)
 			{
-				l.push_back(new blkptr_t(bp[i]));
+				if(bp[i].type != DMU_OT_NONE)
+				{
+					l.push_back(new blkptr_t(bp[i]));
+				}
 			}
 
 			m_bpl.insert(m_bpl.begin(), l.begin(), l.end());
