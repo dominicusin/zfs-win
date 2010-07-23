@@ -61,22 +61,22 @@ int _tmain(int argc, _TCHAR* argv[])
 
 	paths.push_back(L"D:\\Virtual Machines\\OpenSolaris\\OpenSolaris-flat.vmdk");	
 	
-	ZFS::Pool p;
+	ZFS::Pool pool;
 
-	if(!p.Open(name, paths))
+	if(!pool.Open(name, paths))
 	{
 		return -1;
 	}
 
-	ZFS::Device* dev = p.m_devs.front();
+	ZFS::Device* dev = pool.m_devs.front();
 
-	ZFS::ObjectSet os;
+	ZFS::ObjectSet os(&pool);
 
-	if(os.Read(p, &dev->m_active->rootbp, 1))
+	if(os.Init(&dev->m_active->rootbp, 1))
 	{
-		ZFS::DataSet ds;
+		ZFS::DataSet ds(&pool);
 		
-		if(ds.Read(p, os))
+		if(ds.Init(os))
 		{
 			std::list<ZFS::DataSet*> mpl;
 
@@ -86,23 +86,19 @@ int _tmain(int argc, _TCHAR* argv[])
 			{
 				if((*i)->m_mountpoint != "/") continue;
 
-				ZFS::ObjectSet os;
+				ZFS::ObjectSet os(&pool);
 
-				clock_t t = clock();
-
-				if(os.Read(p, &(*i)->m_dataset->bp, 1)) // <-- this can be huge (all files and directories), compression helps a bit
+				if(os.Init(&(*i)->m_dataset.bp, 1))
 				{
-					printf("%d %d\n", clock() - t, os.count());
-
-					dnode_phys_t* root = os["ROOT"];
-
-					if(root != NULL && root->type == DMU_OT_DIRECTORY_CONTENTS)
+					dnode_phys_t root;
+					
+					if(os.Read("ROOT", &root, DMU_OT_DIRECTORY_CONTENTS))
 					{
-						znode_phys_t* node = (znode_phys_t*)root->bonus();
+						znode_phys_t* node = (znode_phys_t*)root.bonus();
 
-						ZFS::ZapObject zap;
+						ZFS::ZapObject zap(&pool);
 
-						if(zap.Read(p, root->blkptr, root->nblkptr))
+						if(zap.Init(root.blkptr, root.nblkptr))
 						{
 							int i = 0;
 						}

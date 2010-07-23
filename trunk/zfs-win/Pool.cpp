@@ -125,7 +125,7 @@ namespace ZFS
 
 	bool Pool::Read(std::vector<uint8_t>& buff, blkptr_t* bp, size_t count)
 	{
-		BlockReader r(this, bp, count);
+		BlockStream r(this, bp, count);
 
 		return r.ReadToEnd(buff);
 	}

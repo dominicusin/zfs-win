@@ -24,24 +24,37 @@
 
 namespace ZFS
 {
-	ObjectSet::ObjectSet()
-		: m_dnode_count(0)
+	ObjectSet::ObjectSet(Pool* pool)
+		: m_pool(pool)
+		, m_objdir(pool)
+		, m_dnode_reader(NULL)
+		, m_dnode_count(0)
 	{
 	}
 
 	ObjectSet::~ObjectSet()
 	{
+		delete m_dnode_reader;
 	}
 
-	bool ObjectSet::Read(Pool& pool, blkptr_t* bp, size_t count)
+	bool ObjectSet::Init(blkptr_t* bp, size_t count)
 	{
 		ASSERT(bp->type == DMU_OT_OBJSET);
 		
-		m_objset.clear();
-		m_dnode.clear();
-		m_dnode_count = 0;
+		{
+			m_objset.clear();
 
-		if(!pool.Read(m_objset, bp, count))
+			if(m_dnode_reader != NULL)
+			{
+				delete m_dnode_reader;
+
+				m_dnode_reader = NULL;
+			}
+
+			m_dnode_count = 0;
+		}
+
+		if(!m_pool->Read(m_objset, bp, count))
 		{
 			return false;
 		}
@@ -53,29 +66,20 @@ namespace ZFS
 			return false;
 		}
 
-		if(!pool.Read(m_dnode, os->meta_dnode.blkptr, os->meta_dnode.nblkptr))
-		{
-			return false;
-		}
+		m_dnode_reader = new BlockFile(m_pool, os->meta_dnode.blkptr, os->meta_dnode.nblkptr);
 
-		m_dnode_count = m_dnode.size() / sizeof(dnode_phys_t);
+		m_dnode_count = (size_t)(m_dnode_reader->GetLogicalSize() / sizeof(dnode_phys_t));
 
 		if(os->type == DMU_OST_META || os->type == DMU_OST_ZFS)
 		{
-			if(m_dnode_count < 2) 
+			dnode_phys_t dn;
+
+			if(!Read(1, &dn, os->type == DMU_OST_META ? DMU_OT_OBJECT_DIRECTORY : DMU_OT_MASTER_NODE))
 			{
 				return false;
 			}
 
-			dnode_phys_t* dn = (*this)[1];
-
-			if(os->type == DMU_OST_META && dn->type != DMU_OT_OBJECT_DIRECTORY
-			|| os->type == DMU_OST_ZFS && dn->type != DMU_OT_MASTER_NODE)
-			{
-				return false;
-			}
-
-			if(!m_objdir.Read(pool, dn->blkptr, dn->nblkptr))
+			if(!m_objdir.Init(dn.blkptr, dn.nblkptr))
 			{
 				return false;
 			}
@@ -84,39 +88,30 @@ namespace ZFS
 		return true;
 	}
 
-	objset_phys_t* ObjectSet::operator -> ()
+	bool ObjectSet::Read(size_t index, dnode_phys_t* dn, dmu_object_type type)
 	{
-		ASSERT(m_objset.size() >= sizeof(objset_phys_t)); 
-		
-		return (objset_phys_t*)m_objset.data();
-	}
+		if(index >= m_dnode_count || dn == NULL) 
+		{	
+			return false;
+		}
 
-	dnode_phys_t* ObjectSet::operator [] (size_t index) 
-	{
-		ASSERT(index < m_dnode_count); 
-		
-		return (dnode_phys_t*)m_dnode.data() + index;
-	}
+		if(!m_dnode_reader->Read(dn, sizeof(dnode_phys_t), sizeof(dnode_phys_t) * index))
+		{
+			return false;
+		}
 
-	dnode_phys_t* ObjectSet::operator [] (const char* s) 
+		return type == DMU_OT_NONE || dn->type == type;
+	}
+	
+	bool ObjectSet::Read(const char* name, dnode_phys_t* dn, dmu_object_type type)
 	{
 		uint64_t index;
 
-		if(m_objdir.Lookup(s, index))
+		if(!m_objdir.Lookup(name, index))
 		{
-			size_t i = (size_t)index;
-
-			if(i < m_dnode_count)
-			{
-				return (*this)[i];
-			}
+			return false;
 		}
 
-		return NULL;
-	}
-
-	size_t ObjectSet::count() 
-	{
-		return m_dnode_count;
+		return Read((size_t)index, dn, type);
 	}
 }

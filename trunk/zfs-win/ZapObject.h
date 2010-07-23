@@ -27,16 +27,18 @@ namespace ZFS
 {
 	class ZapObject : public std::map<std::string, std::vector<uint8_t>*>
 	{
+		Pool* m_pool;
+
 		void RemoveAll();
 		void ParseMicro(std::vector<uint8_t>& buff);
 		void ParseFat(std::vector<uint8_t>& buff);
 		bool ParseArray(std::vector<uint8_t>& buff, zap_leaf_entry_t* e, uint16_t index);
 
 	public:
-		ZapObject();
+		ZapObject(Pool* pool);
 		virtual ~ZapObject();
 
-		bool Read(Pool& pool, blkptr_t* bp, size_t count);
+		bool Init(blkptr_t* bp, size_t count);
 
 		bool Lookup(const char* name, uint64_t& value);
 		bool Lookup(const char* name, std::string& value);

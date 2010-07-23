@@ -40,59 +40,6 @@ namespace ZFS
 		}
 	}
 
-	bool BlockReader::ReadNext(std::vector<uint8_t>& buff)
-	{
-		if(m_bpl.empty())
-		{
-			return false;
-		}
-
-		std::auto_ptr<blkptr_t> bp(m_bpl.front());
-
-		m_bpl.pop_front();
-
-		while(bp->lvl > 0)
-		{
-			if(!Read(bp.get(), buff))
-			{
-				return false;
-			}
-
-			Insert((blkptr_t*)buff.data(), buff.size() / sizeof(blkptr_t));
-
-			bp = std::auto_ptr<blkptr_t>(m_bpl.front());
-
-			m_bpl.pop_front();
-		}
-		
-		return Read(bp.get(), buff);
-	}
-
-	bool BlockReader::ReadToEnd(std::vector<uint8_t>& dst)
-	{
-		dst.clear();
-
-		// TODO: resize/reserve (how much?)
-
-		size_t i = 0;
-
-		std::vector<uint8_t> buff;
-
-		while(ReadNext(buff))
-		{
-			if(i + buff.size() > dst.size())
-			{
-				dst.resize(i + buff.size());
-			}
-
-			memcpy(dst.data() + i, buff.data(), buff.size());
-
-			i += buff.size();
-		}
-
-		return true;
-	}
-
 	void BlockReader::Insert(blkptr_t* bp, size_t count)
 	{
 		if(m_bpl.empty())
@@ -121,7 +68,7 @@ namespace ZFS
 		}
 	}
 
-	bool BlockReader::Read(blkptr_t* bp, std::vector<uint8_t>& dst)
+	bool BlockReader::Read(std::vector<uint8_t>& dst, blkptr_t* bp)
 	{
 		for(int i = 0; i < 3; i++)
 		{
@@ -230,5 +177,201 @@ namespace ZFS
 		}
 
 		return true;
+	}
+
+	// BlockStream
+
+	BlockStream::BlockStream(Pool* pool, blkptr_t* bp, size_t count)
+		: BlockReader(pool, bp, count)
+	{
+	}
+
+	BlockStream::~BlockStream()
+	{
+	}
+	
+	bool BlockStream::ReadNext(std::vector<uint8_t>& buff)
+	{
+		if(m_bpl.empty())
+		{
+			return false;
+		}
+
+		std::auto_ptr<blkptr_t> bp(m_bpl.front());
+
+		m_bpl.pop_front();
+
+		while(bp->lvl > 0)
+		{
+			if(!Read(buff, bp.get()))
+			{
+				return false;
+			}
+
+			Insert((blkptr_t*)buff.data(), buff.size() / sizeof(blkptr_t));
+
+			bp = std::auto_ptr<blkptr_t>(m_bpl.front());
+
+			m_bpl.pop_front();
+		}
+		
+		return Read(buff, bp.get());
+	}
+
+	bool BlockStream::ReadToEnd(std::vector<uint8_t>& dst)
+	{
+		dst.clear();
+
+		// TODO: resize/reserve (how much?)
+
+		size_t i = 0;
+
+		std::vector<uint8_t> buff;
+
+		while(ReadNext(buff))
+		{
+			if(i + buff.size() > dst.size())
+			{
+				dst.resize(i + buff.size());
+			}
+
+			memcpy(dst.data() + i, buff.data(), buff.size());
+
+			i += buff.size();
+		}
+
+		return true;
+	}
+
+	// BlockFile
+
+	BlockFile::BlockFile(Pool* pool, blkptr_t* bp, size_t count)
+		: BlockReader(pool, bp, count)
+		, m_psize(0)
+		, m_lsize(0)
+	{
+		std::list<blkptr_t*> l;
+
+		while(!m_bpl.empty())
+		{
+			std::auto_ptr<blkptr_t> bp(m_bpl.front());
+
+			m_bpl.pop_front();
+
+			while(bp->lvl > 0)
+			{
+				std::vector<uint8_t> buff;
+
+				if(!__super::Read(buff, bp.get()))
+				{
+					ASSERT(0);
+
+					return;
+				}
+
+				Insert((blkptr_t*)buff.data(), buff.size() / sizeof(blkptr_t));
+
+				bp = std::auto_ptr<blkptr_t>(m_bpl.front());
+
+				m_bpl.pop_front();
+			}
+
+			m_psize += bp.get()->psize + 1;
+			m_lsize += bp.get()->lsize + 1;
+
+			l.push_back(bp.release());
+		}
+
+		m_psize <<= 9;
+		m_lsize <<= 9;
+
+		m_bpl.swap(l);
+
+		m_cache.bp = NULL;
+	}
+
+	BlockFile::~BlockFile()
+	{
+	}
+	
+	bool BlockFile::Read(void* dst, size_t size, uint64_t offset)
+	{
+		// TODO: faster than O(n) access to m_bpl 
+
+		uint64_t end = offset + size;
+
+		if(end > m_lsize)
+		{
+			return false;
+		}
+
+		uint8_t* p = (uint8_t*)dst;
+
+		size_t lsize;
+		uint64_t lstart = 0;
+		uint64_t lnext;
+
+		for(auto i = m_bpl.begin(); i != m_bpl.end(); i++)
+		{
+			blkptr_t* bp = *i;
+
+			lsize = ((size_t)bp->lsize + 1) << 9;
+			lnext = lstart + lsize;
+
+			if(offset < lnext)
+			{
+				if(m_cache.bp != bp)
+				{
+					if(!m_pool->Read(m_cache.buff, bp, 1))
+					{
+						return false;
+					}
+
+					m_cache.bp = bp;					
+				}
+
+				size_t n = std::min<size_t>(size, (size_t)(lnext - offset));
+
+				memcpy(p, m_cache.buff.data() + (offset - lstart), n);
+
+				p += n;
+				size -= n;
+
+				while(size > 0 && ++i != m_bpl.end())
+				{
+					bp = *i;
+
+					lsize = ((size_t)bp->lsize + 1) << 9;
+					lnext = lstart + lsize;
+
+					if(m_cache.bp != bp)
+					{
+						if(!__super::Read(m_cache.buff, bp))
+						{
+							return false;
+						}
+
+						m_cache.bp = bp;
+					}
+
+					size_t n = std::min<size_t>(size, lsize);
+
+					memcpy(p, m_cache.buff.data(), n);
+
+					p += n;
+					size -= n;
+
+					lstart = lnext;
+				}
+
+				ASSERT(size == 0);
+
+				return size == 0;
+			}
+
+			lstart = lnext;
+		}
+
+		return false;
 	}
 }
