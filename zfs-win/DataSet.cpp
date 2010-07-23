@@ -24,9 +24,8 @@
 
 namespace ZFS
 {
-	DataSet::DataSet()
-		: m_dir(NULL)
-		, m_dataset(NULL)
+	DataSet::DataSet(Pool* pool)
+		: m_pool(pool)
 	{
 	}
 
@@ -38,50 +37,51 @@ namespace ZFS
 		}
 	}
 
-	bool DataSet::Read(Pool& pool, ObjectSet& os, const char* name, dnode_phys_t* root_dataset)
+	bool DataSet::Init(ObjectSet& os, const char* name, size_t root_index)
 	{
-		m_name = name != NULL ? name : pool.m_name.c_str();
+		m_name = name != NULL ? name : m_pool->m_name.c_str();
 
-		if(root_dataset == NULL)
+		dnode_phys_t dn;
+		
+		if(root_index == -1)
 		{
-			root_dataset = os["root_dataset"];
+			if(!os.Read("root_dataset", &dn, DMU_OT_DSL_DIR))
+			{
+				return false;
+			}
+		}
+		else
+		{
+			if(!os.Read(root_index, &dn, DMU_OT_DSL_DIR))
+			{
+				return false;
+			}
 		}
 
-		if(root_dataset == NULL || root_dataset->type != DMU_OT_DSL_DIR)
+		m_dir = *(dsl_dir_phys_t*)dn.bonus();
+
+		if(!os.Read((size_t)m_dir.head_dataset_obj, &dn, DMU_OT_DSL_DATASET))
 		{
 			return false;
 		}
 
-		m_dir = (dsl_dir_phys_t*)root_dataset->bonus();
+		m_dataset = *(dsl_dataset_phys_t*)dn.bonus();
 
-		dnode_phys_t* dn = os[(size_t)m_dir->head_dataset_obj];
-
-		if(dn == NULL || dn->type != DMU_OT_DSL_DATASET)
+		if(os.Read((size_t)m_dir.props_zapobj, &dn, DMU_OT_DSL_PROPS))
 		{
-			return false;
-		}
+			ZFS::ZapObject zap(m_pool);
 
-		m_dataset = (dsl_dataset_phys_t*)dn->bonus();
-
-		dn = os[(size_t)m_dir->props_zapobj];
-				
-		if(dn != NULL && dn->type == DMU_OT_DSL_PROPS)
-		{
-			ZFS::ZapObject zap;
-
-			if(zap.Read(pool, dn->blkptr, dn->nblkptr))
+			if(zap.Init(dn.blkptr, dn.nblkptr))
 			{
 				zap.Lookup("mountpoint", m_mountpoint);
 			}
 		}
 
-		dn = os[(size_t)m_dir->child_dir_zapobj];
-
-		if(dn != NULL && dn->type == DMU_OT_DSL_DIR_CHILD_MAP)
+		if(os.Read((size_t)m_dir.child_dir_zapobj, &dn, DMU_OT_DSL_DIR_CHILD_MAP))
 		{
-			ZFS::ZapObject zap;
+			ZFS::ZapObject zap(m_pool);
 
-			if(zap.Read(pool, dn->blkptr, dn->nblkptr))
+			if(zap.Init(dn.blkptr, dn.nblkptr))
 			{
 				for(auto i = zap.begin(); i != zap.end(); i++)
 				{
@@ -89,9 +89,9 @@ namespace ZFS
 
 					if(zap.Lookup(i->first.c_str(), index))
 					{
-						DataSet* ds = new DataSet();
+						DataSet* ds = new DataSet(m_pool);
 
-						if(ds->Read(pool, os, i->first.c_str(), os[(size_t)index]))
+						if(ds->Init(os, i->first.c_str(), (size_t)index))
 						{
 							m_children.push_back(ds);
 						}

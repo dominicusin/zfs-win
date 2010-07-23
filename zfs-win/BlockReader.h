@@ -29,24 +29,43 @@ namespace ZFS
 {
 	class BlockReader
 	{
+	protected:
 		Pool* m_pool;
 		std::list<blkptr_t*> m_bpl;
 
 		void Insert(blkptr_t* bp, size_t count);
-		bool Read(blkptr_t* bp, std::vector<uint8_t>& buff);
-
-		// these should be part of some utility class:
-
-		static bool Verify(std::vector<uint8_t>& buff, uint8_t cksum_type, cksum_t& cksum);
-		static bool Decompress(std::vector<uint8_t>& src, std::vector<uint8_t>& dst, size_t lsize, uint8_t comp_type);
+		bool Read(std::vector<uint8_t>& buff, blkptr_t* bp);
 
 	public:
 		BlockReader(Pool* pool, blkptr_t* bp, size_t count);
 		virtual ~BlockReader();
 
+		static bool Verify(std::vector<uint8_t>& buff, uint8_t cksum_type, cksum_t& cksum);
+		static bool Decompress(std::vector<uint8_t>& src, std::vector<uint8_t>& dst, size_t lsize, uint8_t comp_type);
+	};
+
+	class BlockStream : public BlockReader
+	{
+	public:
+		BlockStream(Pool* pool, blkptr_t* bp, size_t count);
+		virtual ~BlockStream();
+
 		bool ReadNext(std::vector<uint8_t>& buff);
 		bool ReadToEnd(std::vector<uint8_t>& buff);
+	};
 
-		// TODO: function to read only part of the whole data (for large files)
+	class BlockFile : public BlockReader
+	{
+		uint64_t m_psize;
+		uint64_t m_lsize;
+		struct {blkptr_t* bp; std::vector<uint8_t> buff;} m_cache;
+
+	public:
+		BlockFile(Pool* pool, blkptr_t* bp, size_t count);
+		virtual ~BlockFile();
+
+		bool Read(void* dst, size_t size, uint64_t offset);
+
+		uint64_t GetLogicalSize() {return m_lsize;}
 	};
 }

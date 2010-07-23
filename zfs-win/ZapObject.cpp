@@ -24,7 +24,8 @@
 
 namespace ZFS
 {
-	ZapObject::ZapObject()
+	ZapObject::ZapObject(Pool* pool)
+		: m_pool(pool)
 	{
 	}
 
@@ -33,13 +34,13 @@ namespace ZFS
 		RemoveAll();
 	}
 
-	bool ZapObject::Read(Pool& pool, blkptr_t* bp, size_t count)
+	bool ZapObject::Init(blkptr_t* bp, size_t count)
 	{
 		RemoveAll();
 
 		std::vector<uint8_t> buff;
 
-		if(pool.Read(buff, bp, count))
+		if(m_pool->Read(buff, bp, count))
 		{
 			if(buff.size() >= sizeof(uint64_t))
 			{

@@ -23,25 +23,31 @@
 
 #include "Pool.h"
 #include "ZapObject.h"
+#include "BlockReader.h"
 
 namespace ZFS
 {
 	class ObjectSet
 	{
+		Pool* m_pool;
 		std::vector<uint8_t> m_objset;
-		std::vector<uint8_t> m_dnode;
-		size_t m_dnode_count;
 		ZapObject m_objdir;
+		BlockFile* m_dnode_reader;
+		size_t m_dnode_count;
 
 	public:
-		ObjectSet();
+		ObjectSet(Pool* pool);
 		virtual ~ObjectSet();
 
-		bool Read(Pool& pool, blkptr_t* bp, size_t count);
+		bool Init(blkptr_t* bp, size_t count);
 
-		objset_phys_t* operator -> ();
-		dnode_phys_t* operator [] (size_t index);
-		dnode_phys_t* operator [] (const char* s);
-		size_t count();
+		objset_phys_t* operator -> () {return (objset_phys_t*)m_objset.data();}
+
+		// node access
+
+		size_t GetCount() {return m_dnode_count;}
+
+		bool Read(size_t index, dnode_phys_t* dn, dmu_object_type type = DMU_OT_NONE);
+		bool Read(const char* name, dnode_phys_t* dn, dmu_object_type type = DMU_OT_NONE);
 	};
 }

@@ -28,18 +28,21 @@ namespace ZFS
 {
 	class DataSet
 	{
+		Pool* m_pool;
+
 	public:
-		dsl_dir_phys_t* m_dir; // TODO: store its properties instead
-		dsl_dataset_phys_t* m_dataset; // TODO: store its properties instead
+		dsl_dir_phys_t m_dir; // TODO: store its properties instead
+		dsl_dataset_phys_t m_dataset; // TODO: store its properties instead
 		std::string m_name;
 		std::string m_mountpoint;
 		std::list<DataSet*> m_children;
 
 	public:
-		DataSet();
+		DataSet(Pool* pool);
 		virtual ~DataSet();
 
-		bool Read(Pool& pool, ObjectSet& os, const char* name = NULL, dnode_phys_t* root_dataset = NULL);
+		bool Init(ObjectSet& os, const char* name = NULL, size_t root_index = -1);
+		
 		void GetMountPoints(std::list<DataSet*>& mpl);
 
 		// TODO: directory browsing functions, handle mount-points transparently
