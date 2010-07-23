@@ -25,7 +25,7 @@
 
 namespace ZFS
 {
-	class ZapObject : protected std::map<std::string, std::vector<uint8_t>*>
+	class ZapObject : public std::map<std::string, std::vector<uint8_t>*>
 	{
 		void RemoveAll();
 		void ParseMicro(std::vector<uint8_t>& buff);

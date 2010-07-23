@@ -226,10 +226,6 @@ struct uberblock_t
 
 //
 
-#define	OBJSET_PHYS_SIZE 2048
-#define	OBJSET_OLD_PHYS_SIZE 1024
-#define	OBJSET_FLAG_USERACCOUNTING_COMPLETE (1ULL<<0)
-
 #define	DNODE_SHIFT 9 /* 512 bytes */
 #define	DN_MIN_INDBLKSHIFT 10 /* 1k */
 #define	DN_MAX_INDBLKSHIFT 14 /* 16k */
@@ -250,11 +246,11 @@ enum dmu_object_type
 	DMU_OT_OBJECT_DIRECTORY, /* ZAP */
 	DMU_OT_OBJECT_ARRAY, /* UINT64 */
 	DMU_OT_PACKED_NVLIST, /* UINT8 (XDR by nvlist_pack/unpack) */
-	DMU_OT_PACKED_NVLIST_SIZE, /* UINT64 */
+	DMU_OT_PACKED_NVLIST_SIZE, /* UINT64 */ /* bonus = uint64_t */
 	DMU_OT_BPLIST, /* UINT64 */
 	DMU_OT_BPLIST_HDR, /* UINT64 */
 	/* spa: */
-	DMU_OT_SPACE_MAP_HEADER, /* UINT64 */
+	DMU_OT_SPACE_MAP_HEADER, /* UINT64 */ /* bonus = space_map_obj_t */
 	DMU_OT_SPACE_MAP = 8, /* UINT64 */
 	/* zil: */
 	DMU_OT_INTENT_LOG, /* UINT64 */
@@ -266,12 +262,12 @@ enum dmu_object_type
 	DMU_OT_DSL_DIR_CHILD_MAP, /* ZAP */
 	DMU_OT_DSL_DS_SNAP_MAP, /* ZAP */
 	DMU_OT_DSL_PROPS, /* ZAP */
-	DMU_OT_DSL_DATASET = 16, /* UINT64 */
+	DMU_OT_DSL_DATASET = 16, /* UINT64 */ /* bonus = dsl_dataset_phys_t */
 	/* zpl: */
-	DMU_OT_ZNODE, /* ZNODE */
+	DMU_OT_ZNODE, /* ZNODE */ /* bonus = znode_phys_t */
 	DMU_OT_OLDACL, /* Old ACL */
 	DMU_OT_PLAIN_FILE_CONTENTS, /* UINT8 */
-	DMU_OT_DIRECTORY_CONTENTS, /* ZAP */
+	DMU_OT_DIRECTORY_CONTENTS, /* ZAP */ /* bonus = znode_phys_t */
 	DMU_OT_MASTER_NODE, /* ZAP */
 	DMU_OT_UNLINKED_SET, /* ZAP */
 	/* zvol: */
@@ -312,6 +308,9 @@ enum dmu_objset_type
 	DMU_OST_NUMTYPES
 };
 
+#define	ZIL_REPLAY_NEEDED 0x1 /* replay needed - internal only */
+#define	ZIL_CLAIM_LR_SEQ_VALID 0x2 /* zh_claim_lr_seq field is valid */
+
 struct zil_header_t
 {
 	uint64_t claim_txg; /* txg in which log blocks were claimed */
@@ -322,6 +321,16 @@ struct zil_header_t
 	uint64_t claim_lr_seq; /* highest claimed lr sequence number */
 	uint64_t pad[3];
 };
+
+struct zil_chain_t
+{
+	uint64_t pad;
+	blkptr_t next_blk; /* next block in chain */
+	uint64_t nused; /* bytes in log block used */
+	zio_eck_t eck; /* block trailer */
+};
+
+// TODO: rest of the zil structs
 
 struct dnode_phys_t
 {
@@ -336,16 +345,18 @@ struct dnode_phys_t
 	uint16_t datablkszsec; /* data block size in 512b sectors */
 	uint16_t bonuslen; /* length of dn_bonus */
 	uint8_t pad2[4];
-
-	/* accounting is protected by dn_dirty_mtx */
 	uint64_t maxblkid; /* largest allocated block ID */
 	uint64_t used; /* bytes (or sectors) of disk space */
-
 	uint64_t pad3[4];
+	blkptr_t blkptr[1]; // 1-3 elements
+	uint8_t pad4[DN_MAX_BONUSLEN];
 
-	blkptr_t blkptr[1];
-	uint8_t bonus[DN_MAX_BONUSLEN];
+	uint8_t* bonus() {return (uint8_t*)&blkptr[nblkptr];}
 };
+
+#define	OBJSET_PHYS_SIZE 2048
+#define	OBJSET_OLD_PHYS_SIZE 1024
+#define	OBJSET_FLAG_USERACCOUNTING_COMPLETE (1ULL<<0)
 
 struct objset_phys_t
 {

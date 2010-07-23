@@ -46,7 +46,7 @@ namespace ZFS
 		uint64_t is_log;
 		std::vector<VirtualDevice> children;
 
-		void Init(NameValueList* nvl) throw(...);
+		void Init(NameValueList* nvl);
 		bool Read(std::vector<uint8_t>& buff, uint64_t size, uint64_t offset);
 		VirtualDevice* Find(uint64_t guid_to_find);
 		void GetLeaves(std::list<VirtualDevice*>& leaves);
