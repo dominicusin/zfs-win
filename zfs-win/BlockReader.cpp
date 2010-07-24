@@ -50,6 +50,10 @@ namespace ZFS
 				{
 					m_bpl.push_back(new blkptr_t(bp[i]));
 				}
+				else
+				{
+					ASSERT(bp[i].lsize == 0);
+				}
 			}
 		}
 		else
@@ -61,6 +65,10 @@ namespace ZFS
 				if(bp[i].type != DMU_OT_NONE)
 				{
 					l.push_back(new blkptr_t(bp[i]));
+				}
+				else
+				{
+					ASSERT(bp[i].lsize == 0);
 				}
 			}
 

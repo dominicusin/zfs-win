@@ -35,11 +35,14 @@ namespace ZFS
 		Close();
 	}
 
-	bool Pool::Open(const char* name, const std::list<std::wstring>& paths)
+	bool Pool::Open(const std::list<std::wstring>& paths, const char* name)
 	{
 		Close();
 
-		m_name = name;
+		if(name != NULL)
+		{
+			m_name = name;
+		}
 
 		for(auto i = paths.begin(); i != paths.end(); i++)
 		{
@@ -48,6 +51,11 @@ namespace ZFS
 			if(!dev->Open(i->c_str()))
 			{
 				return false;
+			}
+
+			if(m_name.empty())
+			{
+				m_name = dev->m_desc.pool.name;
 			}
 
 			if(m_name == dev->m_desc.pool.name && (m_guid == 0 || m_guid == dev->m_desc.pool.guid))

@@ -38,7 +38,7 @@ namespace ZFS
 		Pool();
 		virtual ~Pool();
 
-		bool Open(const char* name, const std::list<std::wstring>& paths);
+		bool Open(const std::list<std::wstring>& paths, const char* name = NULL);
 		void Close();
 		
 		bool Read(std::vector<uint8_t>& buff, blkptr_t* bp, size_t count);

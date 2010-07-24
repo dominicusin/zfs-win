@@ -50,7 +50,7 @@
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
-      <AdditionalDependencies>$(OutDir)zlib.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(OutDir)zlib.lib;$(SolutionDir)dokan\dokan.lib;shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -60,7 +60,7 @@
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
-      <AdditionalDependencies>$(OutDir)zlib.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(OutDir)zlib.lib;$(SolutionDir)dokan\dokan.lib;shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -72,6 +72,7 @@
     <ClInclude Include="NameValueList.h" />
     <ClInclude Include="ObjectSet.h" />
     <ClInclude Include="stdafx.h" />
+    <ClInclude Include="String.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="Pool.h" />
     <ClInclude Include="ZapObject.h" />
@@ -91,6 +92,7 @@
     <ClCompile Include="Pool.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Hash.cpp" />
+    <ClCompile Include="String.cpp" />
     <ClCompile Include="ZapObject.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

@@ -21,25 +21,26 @@
 
 #include "stdafx.h"
 #include "DataSet.h"
+#include "String.h"
 
 namespace ZFS
 {
 	DataSet::DataSet(Pool* pool)
 		: m_pool(pool)
+		, m_head(NULL)
 	{
 	}
 
 	DataSet::~DataSet()
 	{
-		for(auto i = m_children.begin(); i != m_children.end(); i++)
-		{
-			delete *i;
-		}
+		RemoveAll();
 	}
 
 	bool DataSet::Init(ObjectSet& os, const char* name, size_t root_index)
 	{
-		m_name = name != NULL ? name : m_pool->m_name.c_str();
+		RemoveAll();
+
+		m_name = name;
 
 		dnode_phys_t dn;
 		
@@ -66,6 +67,16 @@ namespace ZFS
 		}
 
 		m_dataset = *(dsl_dataset_phys_t*)dn.bonus();
+
+		if(m_dataset.bp.type == DMU_OT_OBJSET)
+		{
+			m_head = new ObjectSet(m_pool);
+
+			if(!m_head->Init(&m_dataset.bp, 1))
+			{
+				return false;
+			}
+		}
 
 		if(os.Read((size_t)m_dir.props_zapobj, &dn, DMU_OT_DSL_PROPS))
 		{
@@ -107,6 +118,50 @@ namespace ZFS
 		return true;
 	}
 
+	void DataSet::RemoveAll()
+	{
+		for(auto i = m_children.begin(); i != m_children.end(); i++)
+		{
+			delete *i;
+		}
+
+		if(m_head != NULL)
+		{
+			delete m_head;
+
+			m_head = NULL;
+		}
+	}
+
+	void DataSet::SetDefaults(DataSet* parent)
+	{
+		// TODO
+
+		for(auto i = m_children.begin(); i != m_children.end(); i++)
+		{
+			(*i)->SetDefaults(this);
+		}
+	}
+	
+	bool DataSet::Init(blkptr_t* bp, size_t count)
+	{
+		ObjectSet os(m_pool);
+
+		if(!os.Init(bp, count))
+		{
+			return false;
+		}
+
+		if(!Init(os, m_pool->m_name.c_str()))
+		{
+			return false;
+		}
+
+		SetDefaults(NULL);
+
+		return true;
+	}
+
 	void DataSet::GetMountPoints(std::list<DataSet*>& mpl)
 	{
 		if(!m_mountpoint.empty())
@@ -118,5 +173,82 @@ namespace ZFS
 		{
 			(*i)->GetMountPoints(mpl);
 		}
+	}
+
+	bool DataSet::Find(const wchar_t* path, dnode_phys_t& dn)
+	{
+		if(m_head == NULL)
+		{
+			return false;
+		}
+
+		std::wstring s = path;
+
+		for(size_t i = 0; i < s.size(); i++)
+		{
+			if(s[i] == '\\') s[i] = '/';
+		}
+
+		if(s[0] != '/')
+		{
+			return false;
+		}
+
+		if(!m_head->Read("ROOT", &dn, DMU_OT_DIRECTORY_CONTENTS))
+		{
+			return false;
+		}
+
+		if(s == L"/")
+		{
+			return true;
+		}
+
+		std::wstring::size_type i = 1;
+
+		do
+		{
+			if(dn.type != DMU_OT_DIRECTORY_CONTENTS)
+			{
+				return false;
+			}
+
+			std::wstring::size_type j = s.find('/', i);
+		
+			std::wstring dir = s.substr(i, j - i);
+
+			wprintf(L"%d-%d %s\n", i, j, dir.c_str());
+
+			i = j != std::string::npos ? j + 1 : std::string::npos;
+
+			ZFS::ZapObject zap(m_pool);
+
+			if(!zap.Init(dn.blkptr, dn.nblkptr))
+			{
+				return false;
+			}
+
+			std::string name = Util::UTF16To8(dir.c_str());
+
+			uint64_t index = 0;
+
+			if(!zap.Lookup(name.c_str(), index))
+			{
+				return false;
+			}
+
+			if(!m_head->Read((size_t)ZFS_DIRENT_OBJ(index), &dn))
+			{
+				return false;
+			}
+
+			if(dn.type != DMU_OT_DIRECTORY_CONTENTS && dn.type != DMU_OT_PLAIN_FILE_CONTENTS)
+			{
+				return false;
+			}
+		}
+		while(i != std::string::npos);
+
+		return true;
 	}
 }
