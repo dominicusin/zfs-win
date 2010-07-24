@@ -95,7 +95,7 @@ namespace ZFS
 			return false;
 		}
 
-		if(!m_dnode_reader->Read(dn, sizeof(dnode_phys_t), sizeof(dnode_phys_t) * index))
+		if(!m_dnode_reader->Read(dn, sizeof(dnode_phys_t), (uint64_t)index * sizeof(dnode_phys_t)))
 		{
 			return false;
 		}

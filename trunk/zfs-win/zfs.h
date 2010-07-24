@@ -963,8 +963,8 @@ struct zfs_acl_phys_t
  * 12 bits are unused.
  */
 
-#define	ZFS_DIRENT_TYPE(de) BF64_GET(de, 60, 4)
-#define	ZFS_DIRENT_OBJ(de) BF64_GET(de, 0, 48)
+#define	ZFS_DIRENT_TYPE(de) ((de) >> 60)
+#define	ZFS_DIRENT_OBJ(de) ((de) & 0xFFFFFFFFFFFFull)
 
 /*
  * This is the persistent portion of the znode.  It is stored

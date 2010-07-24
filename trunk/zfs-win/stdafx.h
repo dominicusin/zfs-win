@@ -30,6 +30,7 @@
 
 #include <windows.h>
 #include <wincrypt.h>
+#include <shlwapi.h>
 
 #include <stdio.h>
 #include <stdint.h>

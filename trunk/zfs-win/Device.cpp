@@ -194,7 +194,7 @@ namespace ZFS
 	{
 		Close();
 
-		m_handle = CreateFile(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, (HANDLE)NULL);
+		m_handle = CreateFile(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, (HANDLE)NULL);
 
 		if(m_handle == INVALID_HANDLE_VALUE)
 		{
@@ -323,6 +323,18 @@ namespace ZFS
 
 	size_t Device::Read(void* buff, uint64_t size)
 	{
+		if(0)
+		{
+			LARGE_INTEGER li, li2;
+
+			li.QuadPart = 0;
+
+			if(SetFilePointerEx(m_handle, li, &li2, FILE_CURRENT))
+			{
+				printf("%I64d - %I64d (%I64d)\n", li2.QuadPart, li2.QuadPart + size, size);
+			}
+		}
+
 		DWORD read = 0;
 
 		ReadFile(m_handle, buff, (DWORD)size, &read, NULL);

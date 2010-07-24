@@ -30,21 +30,24 @@ namespace ZFS
 	{
 		Pool* m_pool;
 
+		bool Init(ObjectSet& os, const char* name = NULL, size_t root_index = -1);
+		void RemoveAll();
+		void SetDefaults(DataSet* parent);
+
 	public:
 		dsl_dir_phys_t m_dir; // TODO: store its properties instead
 		dsl_dataset_phys_t m_dataset; // TODO: store its properties instead
 		std::string m_name;
 		std::string m_mountpoint;
 		std::list<DataSet*> m_children;
+		ObjectSet* m_head;
 
 	public:
 		DataSet(Pool* pool);
 		virtual ~DataSet();
 
-		bool Init(ObjectSet& os, const char* name = NULL, size_t root_index = -1);
-		
+		bool Init(blkptr_t* bp, size_t count);
 		void GetMountPoints(std::list<DataSet*>& mpl);
-
-		// TODO: directory browsing functions, handle mount-points transparently
+		bool Find(const wchar_t* path, dnode_phys_t& dn);
 	};
 }
