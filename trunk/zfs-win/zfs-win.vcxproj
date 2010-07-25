@@ -71,6 +71,7 @@
     <ClInclude Include="Hash.h" />
     <ClInclude Include="NameValueList.h" />
     <ClInclude Include="ObjectSet.h" />
+    <ClInclude Include="resource.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="String.h" />
     <ClInclude Include="targetver.h" />
@@ -94,6 +95,9 @@
     <ClCompile Include="Hash.cpp" />
     <ClCompile Include="String.cpp" />
     <ClCompile Include="ZapObject.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="zfs-win.rc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

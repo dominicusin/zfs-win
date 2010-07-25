@@ -124,10 +124,6 @@ namespace ZFS
 		// http://support.microsoft.com/kb/167296
      
 		*(uint64_t*)pft = (t * 10000000) + 116444736000000000ull;
-
-		SYSTEMTIME st;
-		FileTimeToSystemTime(pft, &st);
-		t = t;
 	}
 
 	static int WINAPI CreateFile(
