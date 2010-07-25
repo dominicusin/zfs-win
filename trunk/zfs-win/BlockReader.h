@@ -29,43 +29,27 @@ namespace ZFS
 {
 	class BlockReader
 	{
-	protected:
 		Pool* m_pool;
-		std::list<blkptr_t*> m_bpl;
+		dnode_phys_t m_node;
+		size_t m_datablksize;
+		size_t m_indblksize;
+		size_t m_indblkcount;
+		uint64_t m_size;
+		struct {uint64_t id; std::vector<uint8_t> buff;} m_cache;
 
-		void Insert(blkptr_t* bp, size_t count);
-		bool Read(std::vector<uint8_t>& buff, blkptr_t* bp);
+		typedef std::vector<blkptr_t> blkcol_t;
+		typedef std::vector<blkcol_t*> blklvl_t;
+		typedef std::vector<blklvl_t> blktree_t;
+
+		blktree_t m_tree;
+
+		bool FetchBlock(size_t level, uint64_t id, blkptr_t** bp);
 
 	public:
-		BlockReader(Pool* pool, blkptr_t* bp, size_t count);
+		BlockReader(Pool* pool, dnode_phys_t* dn);
 		virtual ~BlockReader();
 
-		static bool Verify(std::vector<uint8_t>& buff, uint8_t cksum_type, cksum_t& cksum);
-		static bool Decompress(std::vector<uint8_t>& src, std::vector<uint8_t>& dst, size_t lsize, uint8_t comp_type);
-	};
-
-	class BlockStream : public BlockReader
-	{
-	public:
-		BlockStream(Pool* pool, blkptr_t* bp, size_t count);
-		virtual ~BlockStream();
-
-		bool ReadNext(std::vector<uint8_t>& buff);
-		bool ReadToEnd(std::vector<uint8_t>& buff);
-	};
-
-	class BlockFile : public BlockReader
-	{
-		uint64_t m_psize;
-		uint64_t m_lsize;
-		struct {blkptr_t* bp; std::vector<uint8_t> buff;} m_cache;
-
-	public:
-		BlockFile(Pool* pool, blkptr_t* bp, size_t count);
-		virtual ~BlockFile();
-
-		bool Read(void* dst, size_t size, uint64_t offset);
-
-		uint64_t GetLogicalSize() {return m_lsize;}
+		size_t Read(void* dst, size_t size, uint64_t offset);
+		uint64_t GetDataSize() const {return m_size;}
 	};
 }

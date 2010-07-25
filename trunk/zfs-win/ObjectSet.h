@@ -32,22 +32,18 @@ namespace ZFS
 		Pool* m_pool;
 		std::vector<uint8_t> m_objset;
 		ZapObject m_objdir;
-		BlockFile* m_dnode_reader;
-		size_t m_dnode_count;
+		BlockReader* m_reader;
+		size_t m_count;
 
 	public:
 		ObjectSet(Pool* pool);
 		virtual ~ObjectSet();
 
-		bool Init(blkptr_t* bp, size_t count);
-
-		objset_phys_t* operator -> () {return (objset_phys_t*)m_objset.data();}
-
-		// node access
-
-		size_t GetCount() {return m_dnode_count;}
-
+		bool Init(blkptr_t* bp);
+		size_t GetCount() {return m_count;}
 		bool Read(size_t index, dnode_phys_t* dn, dmu_object_type type = DMU_OT_NONE);
 		bool Read(const char* name, dnode_phys_t* dn, dmu_object_type type = DMU_OT_NONE);
+
+		objset_phys_t* operator -> () {return (objset_phys_t*)m_objset.data();}
 	};
 }

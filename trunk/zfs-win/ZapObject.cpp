@@ -21,6 +21,7 @@
 
 #include "StdAfx.h"
 #include "ZapObject.h"
+#include "BlockReader.h"
 
 namespace ZFS
 {
@@ -34,13 +35,15 @@ namespace ZFS
 		RemoveAll();
 	}
 
-	bool ZapObject::Init(blkptr_t* bp, size_t count)
+	bool ZapObject::Init(dnode_phys_t* dn)
 	{
 		RemoveAll();
 
-		std::vector<uint8_t> buff;
+		BlockReader r(m_pool, dn);
 
-		if(m_pool->Read(buff, bp, count))
+		std::vector<uint8_t> buff((size_t)r.GetDataSize());
+
+		if(r.Read(buff.data(), buff.size(), 0))
 		{
 			if(buff.size() >= sizeof(uint64_t))
 			{

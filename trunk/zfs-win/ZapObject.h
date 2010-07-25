@@ -38,7 +38,7 @@ namespace ZFS
 		ZapObject(Pool* pool);
 		virtual ~ZapObject();
 
-		bool Init(blkptr_t* bp, size_t count);
+		bool Init(dnode_phys_t* dn);
 
 		bool Lookup(const char* name, uint64_t& value);
 		bool Lookup(const char* name, std::string& value);

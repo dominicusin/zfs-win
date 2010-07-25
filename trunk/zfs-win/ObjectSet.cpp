@@ -27,34 +27,31 @@ namespace ZFS
 	ObjectSet::ObjectSet(Pool* pool)
 		: m_pool(pool)
 		, m_objdir(pool)
-		, m_dnode_reader(NULL)
-		, m_dnode_count(0)
+		, m_reader(NULL)
+		, m_count(0)
 	{
 	}
 
 	ObjectSet::~ObjectSet()
 	{
-		delete m_dnode_reader;
+		delete m_reader;
 	}
 
-	bool ObjectSet::Init(blkptr_t* bp, size_t count)
+	bool ObjectSet::Init(blkptr_t* bp)
 	{
 		ASSERT(bp->type == DMU_OT_OBJSET);
 		
 		{
+			delete m_reader;
+
 			m_objset.clear();
-
-			if(m_dnode_reader != NULL)
-			{
-				delete m_dnode_reader;
-
-				m_dnode_reader = NULL;
-			}
-
-			m_dnode_count = 0;
+			m_reader = NULL;
+			m_count = 0;
 		}
 
-		if(!m_pool->Read(m_objset, bp, count))
+		ASSERT(bp->lvl == 0); // must not be indirect
+
+		if(!m_pool->Read(m_objset, bp))
 		{
 			return false;
 		}
@@ -66,9 +63,9 @@ namespace ZFS
 			return false;
 		}
 
-		m_dnode_reader = new BlockFile(m_pool, os->meta_dnode.blkptr, os->meta_dnode.nblkptr);
+		m_reader = new BlockReader(m_pool, &os->meta_dnode);
 
-		m_dnode_count = (size_t)(m_dnode_reader->GetLogicalSize() / sizeof(dnode_phys_t));
+		m_count = (size_t)(m_reader->GetDataSize() / sizeof(dnode_phys_t));
 
 		if(os->type == DMU_OST_META || os->type == DMU_OST_ZFS)
 		{
@@ -79,7 +76,7 @@ namespace ZFS
 				return false;
 			}
 
-			if(!m_objdir.Init(dn.blkptr, dn.nblkptr))
+			if(!m_objdir.Init(&dn))
 			{
 				return false;
 			}
@@ -90,12 +87,14 @@ namespace ZFS
 
 	bool ObjectSet::Read(size_t index, dnode_phys_t* dn, dmu_object_type type)
 	{
-		if(index >= m_dnode_count || dn == NULL) 
+		if(index >= m_count || dn == NULL) 
 		{	
 			return false;
 		}
 
-		if(!m_dnode_reader->Read(dn, sizeof(dnode_phys_t), (uint64_t)index * sizeof(dnode_phys_t)))
+		size_t size = sizeof(dnode_phys_t);
+
+		if(m_reader->Read(dn, size, (uint64_t)index * sizeof(dnode_phys_t)) != size)
 		{
 			return false;
 		}

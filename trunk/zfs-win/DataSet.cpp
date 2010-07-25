@@ -72,7 +72,7 @@ namespace ZFS
 		{
 			m_head = new ObjectSet(m_pool);
 
-			if(!m_head->Init(&m_dataset.bp, 1))
+			if(!m_head->Init(&m_dataset.bp))
 			{
 				return false;
 			}
@@ -82,7 +82,7 @@ namespace ZFS
 		{
 			ZFS::ZapObject zap(m_pool);
 
-			if(zap.Init(dn.blkptr, dn.nblkptr))
+			if(zap.Init(&dn))
 			{
 				zap.Lookup("mountpoint", m_mountpoint);
 			}
@@ -92,7 +92,7 @@ namespace ZFS
 		{
 			ZFS::ZapObject zap(m_pool);
 
-			if(zap.Init(dn.blkptr, dn.nblkptr))
+			if(zap.Init(&dn))
 			{
 				for(auto i = zap.begin(); i != zap.end(); i++)
 				{
@@ -143,11 +143,11 @@ namespace ZFS
 		}
 	}
 	
-	bool DataSet::Init(blkptr_t* bp, size_t count)
+	bool DataSet::Init(blkptr_t* bp)
 	{
 		ObjectSet os(m_pool);
 
-		if(!os.Init(bp, count))
+		if(!os.Init(bp))
 		{
 			return false;
 		}
@@ -173,6 +173,50 @@ namespace ZFS
 		{
 			(*i)->GetMountPoints(mpl);
 		}
+	}
+
+	bool DataSet::Find(const wchar_t* path, DataSet** ds)
+	{
+		std::wstring s(path);
+
+		DataSet* tmp[2] = {this, NULL};
+
+		if(!s.empty())
+		{
+			std::list<std::wstring> sl;
+
+			Util::Explode(s, sl, L"/");
+
+			while(!sl.empty())
+			{
+				std::string s = Util::UTF16To8(sl.front().c_str());
+
+				sl.pop_front();
+
+				tmp[1] = NULL;
+
+				for(auto i = tmp[0]->m_children.begin(); i != tmp[0]->m_children.end(); i++)
+				{
+					if((*i)->m_name == s)
+					{
+						tmp[1] = *i;
+
+						break;
+					}
+				}
+
+				if(tmp[1] == NULL) 
+				{
+					return false;
+				}
+
+				tmp[0] = tmp[1];
+			}
+		}
+
+		*ds = tmp[0];
+
+		return true;
 	}
 
 	bool DataSet::Find(const wchar_t* path, dnode_phys_t& dn)
@@ -217,13 +261,11 @@ namespace ZFS
 		
 			std::wstring dir = s.substr(i, j - i);
 
-			wprintf(L"%d-%d %s\n", i, j, dir.c_str());
-
 			i = j != std::string::npos ? j + 1 : std::string::npos;
 
 			ZFS::ZapObject zap(m_pool);
 
-			if(!zap.Init(dn.blkptr, dn.nblkptr))
+			if(!zap.Init(&dn))
 			{
 				return false;
 			}

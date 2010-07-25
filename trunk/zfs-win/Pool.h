@@ -34,13 +34,16 @@ namespace ZFS
 		std::vector<Device*> m_devs;
 		std::vector<VirtualDevice*> m_vdevs;
 
+		static bool Verify(std::vector<uint8_t>& buff, uint8_t cksum_type, cksum_t& cksum);
+		static bool Decompress(std::vector<uint8_t>& src, std::vector<uint8_t>& dst, size_t lsize, uint8_t comp_type);
+
 	public:
 		Pool();
 		virtual ~Pool();
 
-		bool Open(const std::list<std::wstring>& paths, const char* name = NULL);
+		bool Open(const std::list<std::wstring>& paths, const wchar_t* name = NULL);
 		void Close();
-		
-		bool Read(std::vector<uint8_t>& buff, blkptr_t* bp, size_t count);
+
+		bool Read(std::vector<uint8_t>& buff, blkptr_t* bp);
 	};
 }
