@@ -32,13 +32,91 @@ namespace ZFS
 	class Context
 	{
 	public:
-		Pool pool;
-		DataSet* root;
-		DataSet* mounted;
-		std::wstring name;
+		Pool m_pool;
+		DataSet* m_root;
+		DataSet* m_mounted;
+		std::wstring m_name;
 
-		Context() {root = mounted = NULL;}
-		~Context() {delete root;}
+		Context() {m_root = NULL; m_mounted = NULL;}
+		~Context() {delete m_root;}
+
+		bool Init(std::list<std::wstring>& paths, const std::wstring& name)
+		{
+			m_name = name;
+
+			if(!m_pool.Open(paths, name.c_str()))
+			{
+				wprintf(L"Failed to open pool\n");
+
+				return false;
+			}
+
+			m_root = new ZFS::DataSet(&m_pool);
+		
+			if(!m_root->Init(&m_pool.m_devs.front()->m_active->rootbp))
+			{
+				wprintf(L"Failed to read root dataset\n");
+
+				return false;
+			}
+
+			m_mounted = m_root;
+
+			return true;
+		}
+
+		bool SetDataSet(std::wstring& dataset)
+		{
+			if(!m_root->Find(dataset.c_str(), &m_mounted))
+			{
+				std::list<std::wstring> sl;
+
+				sl.push_back(UTF8To16(m_pool.m_name.c_str()));
+				
+				if(!dataset.empty()) 
+				{
+					sl.push_back(dataset);
+				}
+
+				wprintf(L"Cannot find dataset '%s'\n", Implode(sl, L"/").c_str());
+
+				return false;
+			}
+
+			return true;
+		}
+
+		void List(const DataSet* ds, std::wstring parent = L"")
+		{
+			std::wstring s;
+			
+			if(!parent.empty())
+			{
+				s = parent + L"/";
+			}
+			
+			s += Util::UTF8To16(ds->m_name.c_str());
+
+			wprintf(L"%s\n", s.c_str());
+
+			for(auto i = ds->m_children.begin(); i != ds->m_children.end(); i++)
+			{
+				List(*i, s);
+			}
+		}
+	};
+
+	class FileContext
+	{
+	public:
+		dnode_phys_t node;
+		BlockReader reader;
+	
+		FileContext(Pool* pool, dnode_phys_t* dn)
+			: node(*dn)
+			, reader(pool, dn)
+		{
+		}
 	};
 
 	static void UnixTimeToFileTime(uint64_t t, FILETIME* pft)
@@ -68,7 +146,7 @@ namespace ZFS
 
 		memset(&dn, 0, sizeof(dn));
 
-		if(!ctx->mounted->Find(FileName, dn))
+		if(!ctx->m_mounted->Find(FileName, dn))
 		{
 			dn.type = 0;
 		}
@@ -96,7 +174,7 @@ namespace ZFS
 			DokanFileInfo->IsDirectory = 1;
 		}
 
-		DokanFileInfo->Context = (ULONG64)new dnode_phys_t(dn);
+		DokanFileInfo->Context = (ULONG64)new FileContext(&ctx->m_pool, &dn);
 
 		return CreationDisposition == OPEN_ALWAYS ? ERROR_ALREADY_EXISTS : 0;
 	}
@@ -111,12 +189,12 @@ namespace ZFS
 
 		dnode_phys_t dn;
 
-		if(!ctx->mounted->Find(FileName, dn) || dn.type != DMU_OT_DIRECTORY_CONTENTS)
+		if(!ctx->m_mounted->Find(FileName, dn) || dn.type != DMU_OT_DIRECTORY_CONTENTS)
 		{
 			return -ERROR_PATH_NOT_FOUND;
 		}
 
-		DokanFileInfo->Context = (ULONG64)new dnode_phys_t(dn);
+		DokanFileInfo->Context = (ULONG64)new FileContext(&ctx->m_pool, &dn);
 
 		return 0;
 	}
@@ -142,9 +220,7 @@ namespace ZFS
 
 		if(DokanFileInfo->Context != 0)
 		{
-			dnode_phys_t* dn = (dnode_phys_t*)DokanFileInfo->Context;
-
-			delete dn;
+			delete (FileContext*)DokanFileInfo->Context;
 
 			DokanFileInfo->Context = 0;
 		}
@@ -162,9 +238,7 @@ namespace ZFS
 
 		if(DokanFileInfo->Context != 0)
 		{
-			dnode_phys_t* dn = (dnode_phys_t*)DokanFileInfo->Context;
-
-			delete dn;
+			delete (FileContext*)DokanFileInfo->Context;
 
 			DokanFileInfo->Context = 0;
 		}
@@ -182,9 +256,22 @@ namespace ZFS
 	{
 		Context* ctx = (Context*)DokanFileInfo->DokanOptions->GlobalContext;
 
-		wprintf(L"%s: %s\n", __FUNCTIONW__, FileName);
+		// wprintf(L"%s: %s %d %I64d\n", __FUNCTIONW__, FileName, BufferLength, Offset);
 
-		return -ERROR_ACCESS_DENIED;
+		FileContext* fctx = (FileContext*)DokanFileInfo->Context;
+
+		znode_phys_t* znode = (znode_phys_t*)fctx->node.bonus();
+
+		BufferLength = (DWORD)std::min<uint64_t>(znode->size - Offset, BufferLength);
+
+		*ReadLength = fctx->reader.Read(Buffer, BufferLength, Offset);
+
+		if(*ReadLength != BufferLength)
+		{
+			return -ERROR_READ_FAULT;
+		}
+
+		return 0;
 	}
 
 	static int WINAPI WriteFile(
@@ -222,9 +309,9 @@ namespace ZFS
 
 		wprintf(L"%s: %s\n", __FUNCTIONW__, FileName);
 
-		dnode_phys_t* dn = (dnode_phys_t*)DokanFileInfo->Context;
+		FileContext* fctx = (FileContext*)DokanFileInfo->Context;
 
-		znode_phys_t* node = (znode_phys_t*)dn->bonus();
+		znode_phys_t* node = (znode_phys_t*)fctx->node.bonus();
 
 		UnixTimeToFileTime(node->crtime[0], &HandleFileInformation->ftCreationTime);
 		UnixTimeToFileTime(node->atime[0], &HandleFileInformation->ftLastAccessTime);
@@ -237,9 +324,9 @@ namespace ZFS
 			HandleFileInformation->dwFileAttributes |= FILE_ATTRIBUTE_READONLY; // TODO
 		}
 
-		if(dn->type == DMU_OT_DIRECTORY_CONTENTS)
+		if(fctx->node.type == DMU_OT_DIRECTORY_CONTENTS)
 		{
-			HandleFileInformation->dwFileAttributes |= FILE_ATTRIBUTE_DIRECTORY;
+			HandleFileInformation->dwFileAttributes |= FILE_ATTRIBUTE_DIRECTORY; // TODO: symlinks pointing to directories
 		}
 
 		HandleFileInformation->dwVolumeSerialNumber = 0;
@@ -276,32 +363,44 @@ namespace ZFS
 
 		if(DokanFileInfo->Context != 0)
 		{
-			dnode_phys_t* dn = (dnode_phys_t*)DokanFileInfo->Context;
+			FileContext* fctx = (FileContext*)DokanFileInfo->Context;
 
-			if(dn->type != DMU_OT_DIRECTORY_CONTENTS)
+			if(fctx->node.type != DMU_OT_DIRECTORY_CONTENTS)
 			{
 				return -1;
 			}
 
-			ZFS::ZapObject zap(&ctx->pool);
+			ZFS::ZapObject zap(&ctx->m_pool);
 
-			if(!zap.Init(dn->blkptr, dn->nblkptr))
+			if(!zap.Init(&fctx->node))
 			{
 				return -1;
 			}
+
+			bool everything = wcscmp(SearchPattern, L"*") == 0;
+			bool wildcards = wcschr(SearchPattern, '*') != NULL || wcschr(SearchPattern, '?') != NULL;
 
 			for(auto i = zap.begin(); i != zap.end(); i++)
 			{
+				std::string fn = i->first;
+
 				uint64_t index = 0;
 				
-				if(!zap.Lookup(i->first.c_str(), index))
+				if(!zap.Lookup(fn.c_str(), index))
 				{
 					return false;
 				}
 
+				std::wstring wfn = Util::UTF8To16(fn.c_str());
+
+				if(!everything && !(wildcards ? PathMatchSpec(wfn.c_str(), SearchPattern) : wfn == SearchPattern))
+				{
+					continue;
+				}
+
 				dnode_phys_t subdn;
 
-				if(!ctx->mounted->m_head->Read((size_t)ZFS_DIRENT_OBJ(index), &subdn))
+				if(!ctx->m_mounted->m_head->Read((size_t)ZFS_DIRENT_OBJ(index), &subdn))
 				{
 					return false;
 				}
@@ -319,7 +418,7 @@ namespace ZFS
 
 				if(subdn.type == DMU_OT_DIRECTORY_CONTENTS)
 				{
-					fd.dwFileAttributes |= FILE_ATTRIBUTE_DIRECTORY;
+					fd.dwFileAttributes |= FILE_ATTRIBUTE_DIRECTORY; // TODO: symlinks pointing to directories
 				}
 
 				UnixTimeToFileTime(node->crtime[0], &fd.ftCreationTime);
@@ -329,9 +428,7 @@ namespace ZFS
 				fd.nFileSizeLow = (DWORD)(node->size);
 				fd.nFileSizeHigh = (DWORD)(node->size >> 32);
 
-				std::wstring fn = Util::UTF8To16(i->first.c_str());
-
-				wcscpy(fd.cFileName, fn.c_str());
+				wcscpy(fd.cFileName, wfn.c_str());
 
 				fd.cAlternateFileName[0] = 0; // ???
 
@@ -468,7 +565,7 @@ namespace ZFS
 
 		uint64_t total = 0;
 
-		for(auto i = ctx->pool.m_vdevs.begin(); i != ctx->pool.m_vdevs.end(); i++)
+		for(auto i = ctx->m_pool.m_vdevs.begin(); i != ctx->m_pool.m_vdevs.end(); i++)
 		{
 			VirtualDevice* vdev = *i;
 
@@ -503,12 +600,12 @@ namespace ZFS
 
 		if(TotalNumberOfFreeBytes != NULL)
 		{
-			*TotalNumberOfFreeBytes = total - ctx->root->m_dir.used_bytes;
+			*TotalNumberOfFreeBytes = total - ctx->m_root->m_dir.used_bytes;
 		}
 
 		if(FreeBytesAvailable != NULL)
 		{
-			*FreeBytesAvailable = total - ctx->root->m_dir.used_bytes;
+			*FreeBytesAvailable = total - ctx->m_root->m_dir.used_bytes;
 		}
 
 		return 0;
@@ -530,7 +627,7 @@ namespace ZFS
 
 		if(VolumeNameBuffer != NULL)
 		{
-			wcscpy(VolumeNameBuffer, ctx->name.c_str());
+			wcscpy(VolumeNameBuffer, ctx->m_name.c_str());
 		}
 
 		if(VolumeSerialNumber != NULL)
@@ -576,15 +673,13 @@ static void usage()
 	printf(
 		"ZFS for Windows\n"
 		"\n"
-		"commands:\n"
-		"  mount <drive> <dataset> <pool>\n"
-		"  list <pool>\n"
-		"\n"
-		"pool:\n"
-		"  Any combination of devices (\\\\.\\PhysicalDriveN) or files.\n"
+		"usage:\n"
+		"  mount <drive> <dataset> <pool ..>\n"
+		"  list <pool ..>\n"
 		"\n"
 		"examples:\n"
 		"  zfs-win.exe mount m \"rpool/ROOT/opensolaris\" \"\\\\.\\PhysicalDrive1\" \"\\\\.\\PhysicalDrive2\"\n"
+		"  zfs-win.exe list \"Virtual Machine-flat.vmdk\"\n"
 		);
 }
 
@@ -594,7 +689,9 @@ int _tmain(int argc, _TCHAR* argv[])
 
 	wchar_t drive = 0;
 	std::list<std::wstring> paths;
-	std::list<std::wstring> dataset;
+	std::wstring pool;
+	std::wstring  dataset;
+	bool list_only = false;
 
 	if(wcsicmp(argv[1], L"mount") == 0)
 	{
@@ -602,7 +699,15 @@ int _tmain(int argc, _TCHAR* argv[])
 
 		drive = argv[2][0];
 
-		Util::Explode(std::wstring(argv[3]), dataset, L"/");
+		std::list<std::wstring> sl;
+
+		Util::Explode(std::wstring(argv[3]), sl, L"/");
+
+		pool = sl.front();
+
+		sl.pop_front();
+
+		dataset = Implode(sl, '/');
 
 		for(int i = 4; i < argc; i++)
 		{
@@ -618,7 +723,7 @@ int _tmain(int argc, _TCHAR* argv[])
 			paths.push_back(argv[i]);
 		}
 
-		return -1; // TODO
+		list_only = true;
 	}
 	
 	if(paths.empty()) {usage(); return -1;}
@@ -626,68 +731,34 @@ int _tmain(int argc, _TCHAR* argv[])
 	/*
 
 	paths.clear();
-
 	paths.push_back(L"\\\\.\\PhysicalDrive1");
 	paths.push_back(L"\\\\.\\PhysicalDrive2");
 	paths.push_back(L"\\\\.\\PhysicalDrive3");
-	paths.push_back(L"\\\\.\\PhysicalDrive4");
+	// paths.push_back(L"\\\\.\\PhysicalDrive4");
 
-	Util::Explode(std::wstring(L"share/backup"), dataset, L"/");
+	pool = L"share";
+	dataset = L"backup";
 
 	*/
 
 	ZFS::Context ctx;
 
-	std::wstring name = dataset.front();
-
-	dataset.pop_front();
-
-	if(!ctx.pool.Open(paths, UTF16To8(name.c_str()).c_str()))
+	if(!ctx.Init(paths, pool))
 	{
-		printf("Failed to open pool\n");
-
 		return -1;
 	}
 
-	ctx.root = new ZFS::DataSet(&ctx.pool);
-		
-	if(!ctx.root->Init(&ctx.pool.m_devs.front()->m_active->rootbp, 1))
+	if(list_only)
 	{
-		printf("Failed to read root dataset\n");
+		ctx.List(ctx.m_root);
 
+		return 0;
+	}
+
+	if(!ctx.SetDataSet(dataset))
+	{
 		return -1;
 	}
-
-	ZFS::DataSet* ds = ctx.root;
-
-	ctx.name = name;
-
-	while(!dataset.empty())
-	{
-		name = dataset.front();
-
-		dataset.pop_front();
-
-		ZFS::DataSet* ds2 = NULL;
-
-		for(auto i = ds->m_children.begin(); i != ds->m_children.end(); i++)
-		{
-			if((*i)->m_name == UTF16To8(name.c_str()))
-			{
-				ds2 = *i;
-
-				break;
-			}
-		}
-
-		if(ds2 == NULL) {usage(); return -1;}
-
-		ds = ds2;
-
-		// ctx.name += L"/" + name;
-	}
-
-	ctx.mounted = ds;
 
 	//
 

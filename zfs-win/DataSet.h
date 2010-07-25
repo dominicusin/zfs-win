@@ -35,8 +35,8 @@ namespace ZFS
 		void SetDefaults(DataSet* parent);
 
 	public:
-		dsl_dir_phys_t m_dir; // TODO: store its properties instead
-		dsl_dataset_phys_t m_dataset; // TODO: store its properties instead
+		dsl_dir_phys_t m_dir;
+		dsl_dataset_phys_t m_dataset;
 		std::string m_name;
 		std::string m_mountpoint;
 		std::list<DataSet*> m_children;
@@ -46,8 +46,9 @@ namespace ZFS
 		DataSet(Pool* pool);
 		virtual ~DataSet();
 
-		bool Init(blkptr_t* bp, size_t count);
+		bool Init(blkptr_t* bp);
 		void GetMountPoints(std::list<DataSet*>& mpl);
+		bool Find(const wchar_t* path, DataSet** ds);
 		bool Find(const wchar_t* path, dnode_phys_t& dn);
 	};
 }

@@ -82,9 +82,9 @@ namespace ZFS
 
 				if(vdev.dev != NULL)
 				{
-					dev->Seek(offset + 0x400000);
+					vdev.dev->Seek(offset + 0x400000);
 
-					if(dev->Read(buff.data(), size) == size)
+					if(vdev.dev->Read(buff.data(), size) == size)
 					{
 						return true;
 					}
@@ -113,16 +113,20 @@ namespace ZFS
 			{
 				VirtualDevice& vdev = children[(size_t)rm.m_col[i].devidx];
 
-				 // TODO: reconstruct data if vdev.dev is missing or Read fails
+				bool success = false;
 
 				if(vdev.dev != NULL)
 				{
 					vdev.dev->Seek(rm.m_col[i].offset + 0x400000);
 					
-					if(vdev.dev->Read(p, rm.m_col[i].size) != rm.m_col[i].size)
-					{
-						return false;
-					}
+					success = vdev.dev->Read(p, rm.m_col[i].size) == rm.m_col[i].size;
+				}
+
+				if(!success)
+				{
+					// TODO: reconstruct data
+
+					return false;
 				}
 
 				p += rm.m_col[i].size;
@@ -331,7 +335,7 @@ namespace ZFS
 
 			if(SetFilePointerEx(m_handle, li, &li2, FILE_CURRENT))
 			{
-				printf("%I64d - %I64d (%I64d)\n", li2.QuadPart, li2.QuadPart + size, size);
+				printf("%I64d - %I64d (%I64d) (%I64d)\n", li2.QuadPart, li2.QuadPart + size, size, m_bytes);
 			}
 		}
 

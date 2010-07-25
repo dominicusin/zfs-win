@@ -21,365 +21,179 @@
 
 #include "stdafx.h"
 #include "BlockReader.h"
-#include "Hash.h"
-#include "Compress.h"
 
 namespace ZFS
 {
-	BlockReader::BlockReader(Pool* pool, blkptr_t* bp, size_t count)
+	BlockReader::BlockReader(Pool* pool, dnode_phys_t* dn)
 		: m_pool(pool)
 	{
-		Insert(bp, count);
+		m_node = *dn;
+		m_datablksize = m_node.datablkszsec << 9;
+		m_indblksize = 1 << m_node.indblkshift;
+		m_indblkcount = m_indblksize / sizeof(blkptr_t);
+		m_size = (m_node.maxblkid + 1) * m_datablksize;
+		m_cache.id = -1;
+
+		ASSERT(m_node.nlevels > 0);
+		ASSERT(m_node.indblkshift >= 7);
+		ASSERT(m_node.nblkptr <= m_indblkcount);
+
+		m_tree.resize(m_node.nlevels);
+
+		size_t n = (size_t)((m_node.maxblkid + 1 + m_indblkcount - 1) / m_indblkcount);
+
+		for(size_t i = 0; i < m_tree.size(); i++)
+		{
+			blklvl_t& lvl = m_tree[i];
+
+			lvl.resize(n);
+
+			memset(lvl.data(), 0, lvl.size() * sizeof(blkcol_t*));
+
+			n = (n + m_indblkcount - 1) / m_indblkcount;
+		}
+
+		blkcol_t* col = new blkcol_t(m_node.nblkptr);
+
+		memcpy(col->data(), m_node.blkptr, m_node.nblkptr * sizeof(blkptr_t));
+
+		m_tree.back()[0] = col;
 	}
 
 	BlockReader::~BlockReader()
 	{
-		for(auto i = m_bpl.begin(); i != m_bpl.end(); i++)
+		for(auto i = m_tree.begin(); i != m_tree.end(); i++)
 		{
-			delete *i;
-		}
-	}
-
-	void BlockReader::Insert(blkptr_t* bp, size_t count)
-	{
-		if(m_bpl.empty())
-		{
-			for(size_t i = 0; i < count; i++)
+			for(auto j = i->begin(); j != i->end(); j++)
 			{
-				if(bp[i].type != DMU_OT_NONE)
-				{
-					m_bpl.push_back(new blkptr_t(bp[i]));
-				}
-				else
-				{
-					ASSERT(bp[i].lsize == 0);
-				}
+				delete *j;
 			}
 		}
-		else
-		{
-			std::list<blkptr_t*> l;
-
-			for(size_t i = 0; i < count; i++)
-			{
-				if(bp[i].type != DMU_OT_NONE)
-				{
-					l.push_back(new blkptr_t(bp[i]));
-				}
-				else
-				{
-					ASSERT(bp[i].lsize == 0);
-				}
-			}
-
-			m_bpl.insert(m_bpl.begin(), l.begin(), l.end());
-		}
 	}
 
-	bool BlockReader::Read(std::vector<uint8_t>& dst, blkptr_t* bp)
+	size_t BlockReader::Read(void* dst, size_t size, uint64_t offset)
 	{
-		for(int i = 0; i < 3; i++)
+		uint64_t block_id = offset / m_datablksize;
+		size_t block_offset = (size_t)(offset - (uint64_t)m_datablksize * block_id);
+
+		uint8_t* ptr = (uint8_t*)dst;
+
+		for(; block_id <= m_node.maxblkid && size > 0; block_id++)
 		{
-			dva_t* addr = &bp->blk_dva[i];
+			blkptr_t* bp = NULL;
 
-			ASSERT(addr->gang == 0); // TODO: zio_gbh_phys_t (not used ??? never encountered one, yet)
-
-			for(auto i = m_pool->m_vdevs.begin(); i != m_pool->m_vdevs.end(); i++)
-			{
-				VirtualDevice* vdev = *i;
-
-				if(vdev->id != addr->vdev)
-				{
-					continue;
-				}
-
-				// << 9 or vdev->ashift? 
-				//
-				// on-disk spec says: "All sizes are stored as the number of 512 byte sectors (minus one) needed to
-				// represent the size of this block.", but is it still true or outdated?
-
-				size_t psize = ((size_t)bp->psize + 1) << 9;
-				size_t lsize = ((size_t)bp->lsize + 1) << 9;
-
-				std::vector<uint8_t> src(psize);
-
-				vdev->Read(src, psize, addr->offset << 9);
-
-				if(Verify(src, bp->cksum_type, bp->cksum))
-				{
-					if(Decompress(src, dst, lsize, bp->comp_type))
-					{
-						return true;
-					}
-				}
-			}
-		}
-
-		return false;
-	}
-
-	bool BlockReader::Verify(std::vector<uint8_t>& buff, uint8_t cksum_type, cksum_t& cksum)
-	{
-		cksum_t c;
-
-		memset(&c, 0, sizeof(c));
-
-		switch(cksum_type)
-		{
-		case ZIO_CHECKSUM_OFF:
-			return true;
-		case ZIO_CHECKSUM_ON: // ???
-		case ZIO_CHECKSUM_ZILOG:
-		case ZIO_CHECKSUM_FLETCHER_2:
-			fletcher_2_native(buff.data(), buff.size(), &c);
-			break;
-		case ZIO_CHECKSUM_ZILOG2:
-		case ZIO_CHECKSUM_FLETCHER_4:
-			fletcher_4_native(buff.data(), buff.size(), &c);
-			break;
-		case ZIO_CHECKSUM_LABEL:
-		case ZIO_CHECKSUM_GANG_HEADER:
-		case ZIO_CHECKSUM_SHA256:
-			sha256(buff.data(), buff.size(), &c); // TESTME
-			break;
-		default:
-			ASSERT(0);
-			return false;
-		}
-
-		ASSERT(cksum == c);
-
-		return cksum == c;
-	}
-
-	bool BlockReader::Decompress(std::vector<uint8_t>& src, std::vector<uint8_t>& dst, size_t lsize, uint8_t comp_type)
-	{
-		switch(comp_type)
-		{
-		case ZIO_COMPRESS_ON: // ???
-		case ZIO_COMPRESS_LZJB:
-			dst.resize(lsize);
-			lzjb_decompress(src.data(), dst.data(), src.size(), lsize);
-			break;
-		case ZIO_COMPRESS_OFF:
-		case ZIO_COMPRESS_EMPTY: // ???
-			dst.swap(src);
-			break;
-		case ZIO_COMPRESS_GZIP_1:
-		case ZIO_COMPRESS_GZIP_2:
-		case ZIO_COMPRESS_GZIP_3:
-		case ZIO_COMPRESS_GZIP_4:
-		case ZIO_COMPRESS_GZIP_5:
-		case ZIO_COMPRESS_GZIP_6:
-		case ZIO_COMPRESS_GZIP_7:
-		case ZIO_COMPRESS_GZIP_8:
-		case ZIO_COMPRESS_GZIP_9:
-			gzip_decompress(src.data(), dst.data(), src.size(), lsize); // TESTME
-			break;
-		case ZIO_COMPRESS_ZLE:
-			zle_decompress(src.data(), dst.data(), src.size(), lsize, 64); // TESTME
-			break;
-		default:
-			ASSERT(0);
-			return false;
-		}
-
-		return true;
-	}
-
-	// BlockStream
-
-	BlockStream::BlockStream(Pool* pool, blkptr_t* bp, size_t count)
-		: BlockReader(pool, bp, count)
-	{
-	}
-
-	BlockStream::~BlockStream()
-	{
-	}
-	
-	bool BlockStream::ReadNext(std::vector<uint8_t>& buff)
-	{
-		if(m_bpl.empty())
-		{
-			return false;
-		}
-
-		std::auto_ptr<blkptr_t> bp(m_bpl.front());
-
-		m_bpl.pop_front();
-
-		while(bp->lvl > 0)
-		{
-			if(!Read(buff, bp.get()))
+			if(!FetchBlock(0, block_id, &bp))
 			{
 				return false;
 			}
 
-			Insert((blkptr_t*)buff.data(), buff.size() / sizeof(blkptr_t));
+			size_t bytes = 0;
 
-			bp = std::auto_ptr<blkptr_t>(m_bpl.front());
-
-			m_bpl.pop_front();
-		}
-		
-		return Read(buff, bp.get());
-	}
-
-	bool BlockStream::ReadToEnd(std::vector<uint8_t>& dst)
-	{
-		dst.clear();
-
-		// TODO: resize/reserve (how much?)
-
-		size_t i = 0;
-
-		std::vector<uint8_t> buff;
-
-		while(ReadNext(buff))
-		{
-			if(i + buff.size() > dst.size())
+			if(bp->type != DMU_OT_NONE)
 			{
-				dst.resize(i + buff.size());
+				if(m_cache.id != block_id)
+				{
+					if(!m_pool->Read(m_cache.buff, bp))
+					{
+						break;
+					}
+
+					m_cache.id = block_id;
+				}
+
+				ASSERT(m_cache.buff.size() == m_datablksize);
+
+				uint8_t* src = m_cache.buff.data() + block_offset;
+				size_t src_size = m_cache.buff.size() - block_offset;
+
+				bytes = std::min<size_t>(src_size, size);
+
+				memcpy(ptr, src, bytes);
+			}
+			else
+			{
+				if(ptr == (uint8_t*)dst && m_node.type == DMU_OT_PLAIN_FILE_CONTENTS)
+				{
+					dnode_phys_t* dnode = &m_node;
+					znode_phys_t* znode = (znode_phys_t*)m_node.bonus();
+
+					uint8_t* extra = (uint8_t*)(znode + 1);
+					size_t extra_size = (uint8_t*)(dnode + 1) - extra;
+
+					if(znode->size <= extra_size)
+					{
+						bytes = std::min<size_t>(size, (size_t)znode->size);
+						
+						memcpy(ptr, extra, bytes);
+
+						return bytes;
+					}
+				}
+
+				size_t src_size = m_datablksize - block_offset;
+
+				bytes = std::min<size_t>(src_size, size);
+
+				memset(ptr, 0, bytes);
 			}
 
-			memcpy(dst.data() + i, buff.data(), buff.size());
+			ptr += bytes;
+			size -= bytes;
 
-			i += buff.size();
+			block_offset = 0;
 		}
+
+		ASSERT(size == 0); 
+
+		return ptr - (uint8_t*)dst;
+	}
+
+	bool BlockReader::FetchBlock(size_t level, uint64_t id, blkptr_t** bp)
+	{
+		blklvl_t& lvl = m_tree[level];
+
+		size_t col_id = (size_t)(id >> (m_node.indblkshift - 7));
+
+		if(lvl[col_id] == NULL)
+		{
+			blkptr_t* bp = NULL;
+
+			if(!FetchBlock(level + 1, col_id, &bp))
+			{
+				return false;
+			}
+
+			std::vector<uint8_t> buff;
+
+			if(bp->type != DMU_OT_NONE)
+			{
+				if(!m_pool->Read(buff, bp) || buff.size() != m_indblksize)
+				{
+					return false;
+				}
+			}
+			else
+			{
+				// FIXME: there may empty pointers in the middle of other valid pointers (???)
+
+				buff.resize(m_indblksize);
+
+				memset(buff.data(), 0, m_indblksize);
+			}
+
+			blkcol_t* col = new blkcol_t(m_indblkcount);
+
+			memcpy(col->data(), buff.data(), buff.size()); // TODO: read into col->data() directly
+
+			lvl[col_id] = col;
+		}
+
+		blkcol_t* col = lvl[col_id];
+
+		uint64_t mask = (1ull << (m_node.indblkshift - 7)) - 1;
+
+		*bp = &col->at((size_t)(id & mask));
 
 		return true;
-	}
-
-	// BlockFile
-
-	BlockFile::BlockFile(Pool* pool, blkptr_t* bp, size_t count)
-		: BlockReader(pool, bp, count)
-		, m_psize(0)
-		, m_lsize(0)
-	{
-		std::list<blkptr_t*> l;
-
-		while(!m_bpl.empty())
-		{
-			std::auto_ptr<blkptr_t> bp(m_bpl.front());
-
-			m_bpl.pop_front();
-
-			while(bp->lvl > 0)
-			{
-				std::vector<uint8_t> buff;
-
-				if(!__super::Read(buff, bp.get()))
-				{
-					ASSERT(0);
-
-					return;
-				}
-
-				Insert((blkptr_t*)buff.data(), buff.size() / sizeof(blkptr_t));
-
-				bp = std::auto_ptr<blkptr_t>(m_bpl.front());
-
-				m_bpl.pop_front();
-			}
-
-			m_psize += bp.get()->psize + 1;
-			m_lsize += bp.get()->lsize + 1;
-
-			l.push_back(bp.release());
-		}
-
-		m_psize <<= 9;
-		m_lsize <<= 9;
-
-		m_bpl.swap(l);
-
-		m_cache.bp = NULL;
-	}
-
-	BlockFile::~BlockFile()
-	{
-	}
-	
-	bool BlockFile::Read(void* dst, size_t size, uint64_t offset)
-	{
-		// TODO: faster than O(n) access to m_bpl 
-
-		uint64_t end = offset + size;
-
-		if(end > m_lsize)
-		{
-			return false;
-		}
-
-		uint8_t* p = (uint8_t*)dst;
-
-		size_t lsize;
-		uint64_t lstart = 0;
-		uint64_t lnext;
-
-		for(auto i = m_bpl.begin(); i != m_bpl.end(); i++)
-		{
-			blkptr_t* bp = *i;
-
-			lsize = ((size_t)bp->lsize + 1) << 9;
-			lnext = lstart + lsize;
-
-			if(offset < lnext)
-			{
-				if(m_cache.bp != bp)
-				{
-					if(!m_pool->Read(m_cache.buff, bp, 1))
-					{
-						return false;
-					}
-
-					m_cache.bp = bp;					
-				}
-
-				size_t n = std::min<size_t>(size, (size_t)(lnext - offset));
-
-				memcpy(p, m_cache.buff.data() + (offset - lstart), n);
-
-				p += n;
-				size -= n;
-
-				while(size > 0 && ++i != m_bpl.end())
-				{
-					bp = *i;
-
-					lsize = ((size_t)bp->lsize + 1) << 9;
-					lnext = lstart + lsize;
-
-					if(m_cache.bp != bp)
-					{
-						if(!__super::Read(m_cache.buff, bp))
-						{
-							return false;
-						}
-
-						m_cache.bp = bp;
-					}
-
-					size_t n = std::min<size_t>(size, lsize);
-
-					memcpy(p, m_cache.buff.data(), n);
-
-					p += n;
-					size -= n;
-
-					lstart = lnext;
-				}
-
-				ASSERT(size == 0);
-
-				return size == 0;
-			}
-
-			lstart = lnext;
-		}
-
-		return false;
 	}
 }
