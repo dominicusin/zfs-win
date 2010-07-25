@@ -59,6 +59,7 @@ namespace ZFS
 	bool VirtualDevice::Read(std::vector<uint8_t>& buff, uint64_t size, uint64_t offset)
 	{
 		// TODO: handle chksum errors
+		// TODO: parallel reads with overlapped i/o
 
 		buff.resize((size_t)size);
 

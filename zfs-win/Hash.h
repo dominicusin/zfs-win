@@ -135,5 +135,3 @@ extern void fletcher_4_byteswap(const void* buf, uint64_t size, cksum_t* zcp);
 extern void fletcher_4_incremental_native(const void* buf, uint64_t size, cksum_t* zcp);
 extern void fletcher_4_incremental_byteswap(const void* buf, uint64_t size, cksum_t* zcp);
 extern void sha256(const void* buf, uint64_t size, cksum_t* zcp);
-
-// TODO: sha256
