@@ -29,6 +29,7 @@ namespace ZFS
 	class DataSet
 	{
 		Pool* m_pool;
+		std::map<std::wstring, dnode_phys_t> m_cache;
 
 		bool Init(ObjectSet& os, const char* name = NULL, size_t root_index = -1);
 		void RemoveAll();

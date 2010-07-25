@@ -174,7 +174,7 @@ namespace ZFS
 			}
 			else
 			{
-				// FIXME: there may empty pointers in the middle of other valid pointers (???)
+				// FIXME: there may be empty pointers in the middle of other valid pointers (???)
 
 				buff.resize(m_indblksize);
 

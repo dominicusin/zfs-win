@@ -138,11 +138,15 @@ namespace ZFS
 
 		wprintf(L"%s: %s\n", __FUNCTIONW__, FileName);
 
+		std::wstring fn = FileName;
+
+		fn = TrimRight(fn, L"\\");
+
 		dnode_phys_t dn;
 
 		memset(&dn, 0, sizeof(dn));
 
-		if(!ctx->m_mounted->Find(FileName, dn))
+		if(!ctx->m_mounted->Find(fn.c_str(), dn))
 		{
 			dn.type = 0;
 		}
@@ -183,9 +187,13 @@ namespace ZFS
 
 		wprintf(L"%s: %s\n", __FUNCTIONW__, FileName);
 
+		std::wstring fn = FileName;
+
+		fn = TrimRight(fn, L"\\");
+
 		dnode_phys_t dn;
 
-		if(!ctx->m_mounted->Find(FileName, dn) || dn.type != DMU_OT_DIRECTORY_CONTENTS)
+		if(!ctx->m_mounted->Find(fn.c_str(), dn) || dn.type != DMU_OT_DIRECTORY_CONTENTS)
 		{
 			return -ERROR_PATH_NOT_FOUND;
 		}
