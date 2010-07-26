@@ -355,7 +355,7 @@ namespace ZFS
 	{
 		NameValueList nvl;
 
-		nvl.Read(&vd.nvlist[4], sizeof(vd.nvlist) - 4);
+		nvl.Init(vd.nvlist, sizeof(vd.nvlist));
 
 		try
 		{
@@ -369,7 +369,7 @@ namespace ZFS
 			txg = nvl.at("txg")->u64[0];
 			version = nvl.at("version")->u64[0];
 			top.Init(nvl.at("vdev_tree")->list);
-			ub_size = 1 << std::max<int>((int)top.ashift, UBERBLOCK_SHIFT);
+			ub_size = 1 << std::max<size_t>((size_t)top.ashift, UBERBLOCK_SHIFT);
 		}
 		catch(...)
 		{

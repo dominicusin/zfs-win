@@ -84,7 +84,7 @@ namespace ZFS
 
 			if(!FetchBlock(0, block_id, &bp))
 			{
-				return false;
+				return 0;
 			}
 
 			size_t bytes = 0;
@@ -114,6 +114,8 @@ namespace ZFS
 			{
 				if(ptr == (uint8_t*)dst && m_node.type == DMU_OT_PLAIN_FILE_CONTENTS)
 				{
+					// symlinks are stored after znode
+
 					dnode_phys_t* dnode = &m_node;
 					znode_phys_t* znode = (znode_phys_t*)m_node.bonus();
 

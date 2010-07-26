@@ -69,20 +69,25 @@ namespace ZFS
 
 		if(os->type == DMU_OST_META || os->type == DMU_OST_ZFS)
 		{
-			dnode_phys_t dn;
-
-			if(!Read(1, &dn, os->type == DMU_OST_META ? DMU_OT_OBJECT_DIRECTORY : DMU_OT_MASTER_NODE))
-			{
-				return false;
-			}
-
-			if(!m_objdir.Init(&dn))
+			if(!Read(1, m_objdir, os->type == DMU_OST_META ? DMU_OT_OBJECT_DIRECTORY : DMU_OT_MASTER_NODE))
 			{
 				return false;
 			}
 		}
 
 		return true;
+	}
+
+	size_t ObjectSet::GetIndex(const char* name)
+	{
+		uint64_t index;
+
+		if(!m_objdir.Lookup(name, index))
+		{
+			index = -1;
+		}
+
+		return (size_t)index;
 	}
 
 	bool ObjectSet::Read(size_t index, dnode_phys_t* dn, dmu_object_type type)
@@ -101,16 +106,49 @@ namespace ZFS
 
 		return type == DMU_OT_NONE || dn->type == type;
 	}
-	
-	bool ObjectSet::Read(const char* name, dnode_phys_t* dn, dmu_object_type type)
-	{
-		uint64_t index;
 
-		if(!m_objdir.Lookup(name, index))
+	bool ObjectSet::Read(size_t index, ZapObject& zap, dmu_object_type type)
+	{
+		dnode_phys_t dn;
+
+		if(!Read(index, &dn, type))
 		{
 			return false;
 		}
 
-		return Read((size_t)index, dn, type);
+		if(!zap.Init(&dn))
+		{
+			return false;
+		}
+
+		return true;
+	}
+
+	bool ObjectSet::Read(size_t index, NameValueList& nvl)
+	{
+		dnode_phys_t dn;
+
+		if(!Read(index, &dn, DMU_OT_PACKED_NVLIST))
+		{
+			return false;
+		}
+
+		BlockReader r(m_pool, &dn);
+
+		size_t size = (size_t)r.GetDataSize();
+
+		std::vector<uint8_t> buff(size);
+
+		if(r.Read(buff.data(), size, 0) != size)
+		{
+			return false;
+		}
+
+		if(!nvl.Init(buff.data(), buff.size()))
+		{
+			return false;
+		}
+
+		return true;
 	}
 }

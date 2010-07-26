@@ -41,11 +41,13 @@ namespace ZFS
 
 		BlockReader r(m_pool, dn);
 
-		std::vector<uint8_t> buff((size_t)r.GetDataSize());
+		size_t size = (size_t)r.GetDataSize();
 
-		if(r.Read(buff.data(), buff.size(), 0))
+		if(size >= sizeof(uint64_t))
 		{
-			if(buff.size() >= sizeof(uint64_t))
+			std::vector<uint8_t> buff(size);
+
+			if(r.Read(buff.data(), size, 0) == size)
 			{
 				switch(*(uint64_t*)buff.data())
 				{

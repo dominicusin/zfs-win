@@ -89,10 +89,12 @@ namespace ZFS
 		uint64_t ReadU64(const uint8_t*& ptr);
 		std::string ReadString(const uint8_t*& ptr);
 
+		const uint8_t* Read(const uint8_t* ptr, size_t size);
+
 	public:
 		NameValueList();
 		virtual ~NameValueList();
 
-		const uint8_t* Read(const uint8_t* ptr, size_t size);
+		bool Init(const uint8_t* ptr, size_t size);
 	};
 }

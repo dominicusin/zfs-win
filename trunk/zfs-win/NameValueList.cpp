@@ -87,6 +87,15 @@ namespace ZFS
 		}
 	}
 
+	bool NameValueList::Init(const uint8_t* ptr, size_t size)
+	{
+		if(size < 4) return false;
+
+		Read(ptr + 4, size - 4);
+
+		return true;
+	}
+
 	const uint8_t* NameValueList::Read(const uint8_t* ptr, size_t size)
 	{
 		const uint8_t* ptr_end = ptr + size;
