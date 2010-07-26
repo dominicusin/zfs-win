@@ -22,6 +22,7 @@
 #pragma once
 
 #include "Pool.h"
+#include "NameValueList.h"
 #include "ZapObject.h"
 #include "BlockReader.h"
 
@@ -40,9 +41,13 @@ namespace ZFS
 		virtual ~ObjectSet();
 
 		bool Init(blkptr_t* bp);
+
 		size_t GetCount() {return m_count;}
+		size_t GetIndex(const char* name);
+
 		bool Read(size_t index, dnode_phys_t* dn, dmu_object_type type = DMU_OT_NONE);
-		bool Read(const char* name, dnode_phys_t* dn, dmu_object_type type = DMU_OT_NONE);
+		bool Read(size_t index, ZapObject& zap, dmu_object_type type = DMU_OT_NONE);
+		bool Read(size_t index, NameValueList& nvl);
 
 		objset_phys_t* operator -> () {return (objset_phys_t*)m_objset.data();}
 	};

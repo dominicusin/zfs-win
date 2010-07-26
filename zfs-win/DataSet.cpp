@@ -46,9 +46,16 @@ namespace ZFS
 		
 		if(root_index == -1)
 		{
-			if(!os.Read("root_dataset", &dn, DMU_OT_DSL_DIR))
+			if(!os.Read(os.GetIndex("root_dataset"), &dn, DMU_OT_DSL_DIR))
 			{
 				return false;
+			}
+
+			NameValueList nvl;
+
+			if(os.Read(os.GetIndex("config"), nvl))
+			{
+				// TODO: root vdev config
 			}
 		}
 		else
@@ -78,38 +85,30 @@ namespace ZFS
 			}
 		}
 
-		if(os.Read((size_t)m_dir.props_zapobj, &dn, DMU_OT_DSL_PROPS))
-		{
-			ZFS::ZapObject zap(m_pool);
+		ZapObject zap(m_pool);
 
-			if(zap.Init(&dn))
-			{
-				zap.Lookup("mountpoint", m_mountpoint);
-			}
+		if(os.Read((size_t)m_dir.props_zapobj, zap, DMU_OT_DSL_PROPS))
+		{
+			zap.Lookup("mountpoint", m_mountpoint);
 		}
 
-		if(os.Read((size_t)m_dir.child_dir_zapobj, &dn, DMU_OT_DSL_DIR_CHILD_MAP))
+		if(os.Read((size_t)m_dir.child_dir_zapobj, zap, DMU_OT_DSL_DIR_CHILD_MAP))
 		{
-			ZFS::ZapObject zap(m_pool);
-
-			if(zap.Init(&dn))
+			for(auto i = zap.begin(); i != zap.end(); i++)
 			{
-				for(auto i = zap.begin(); i != zap.end(); i++)
+				uint64_t index;
+
+				if(zap.Lookup(i->first.c_str(), index))
 				{
-					uint64_t index;
+					DataSet* ds = new DataSet(m_pool);
 
-					if(zap.Lookup(i->first.c_str(), index))
+					if(ds->Init(os, i->first.c_str(), (size_t)index))
 					{
-						DataSet* ds = new DataSet(m_pool);
-
-						if(ds->Init(os, i->first.c_str(), (size_t)index))
-						{
-							m_children.push_back(ds);
-						}
-						else
-						{
-							delete ds;
-						}
+						m_children.push_back(ds);
+					}
+					else
+					{
+						delete ds;
 					}
 				}
 			}
@@ -248,7 +247,7 @@ namespace ZFS
 		}
 		else
 		{
-			if(!m_head->Read("ROOT", &dn, DMU_OT_DIRECTORY_CONTENTS))
+			if(!m_head->Read(m_head->GetIndex("ROOT"), &dn, DMU_OT_DIRECTORY_CONTENTS))
 			{
 				return false;
 			}
