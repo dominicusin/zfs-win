@@ -97,7 +97,7 @@ namespace ZFS
 			
 			s += Util::UTF8To16(ds->m_name.c_str());
 
-			wprintf(L"[%d] %s\n", clock(), s.c_str());
+			// wprintf(L"[%d] %s\n", clock(), s.c_str());
 
 			for(auto i = ds->m_children.begin(); i != ds->m_children.end(); i++)
 			{
@@ -136,7 +136,7 @@ namespace ZFS
 	{
 		Context* ctx = (Context*)DokanFileInfo->DokanOptions->GlobalContext;
 
-		wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
+		// wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
 
 		std::wstring fn = FileName;
 
@@ -185,7 +185,7 @@ namespace ZFS
 	{
 		Context* ctx = (Context*)DokanFileInfo->DokanOptions->GlobalContext;
 
-		wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
+		// wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
 
 		std::wstring fn = FileName;
 
@@ -209,7 +209,7 @@ namespace ZFS
 	{
 		Context* ctx = (Context*)DokanFileInfo->DokanOptions->GlobalContext;
 
-		wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
+		// wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
 
 		return -ERROR_ACCESS_DENIED;
 	}
@@ -220,7 +220,7 @@ namespace ZFS
 	{
 		Context* ctx = (Context*)DokanFileInfo->DokanOptions->GlobalContext;
 
-		wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
+		// wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
 
 		if(DokanFileInfo->Context != 0)
 		{
@@ -238,7 +238,7 @@ namespace ZFS
 	{
 		Context* ctx = (Context*)DokanFileInfo->DokanOptions->GlobalContext;
 
-		wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
+		// wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
 
 		if(DokanFileInfo->Context != 0)
 		{
@@ -260,7 +260,7 @@ namespace ZFS
 	{
 		Context* ctx = (Context*)DokanFileInfo->DokanOptions->GlobalContext;
 
-		wprintf(L"%[%d] %s: %s %d %I64d\n", clock(), __FUNCTIONW__, FileName, BufferLength, Offset);
+		// wprintf(L"%[%d] %s: %s %d %I64d\n", clock(), __FUNCTIONW__, FileName, BufferLength, Offset);
 
 		FileContext* fctx = (FileContext*)DokanFileInfo->Context;
 
@@ -288,7 +288,7 @@ namespace ZFS
 	{
 		Context* ctx = (Context*)DokanFileInfo->DokanOptions->GlobalContext;
 
-		wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
+		// wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
 
 		return -ERROR_ACCESS_DENIED;
 	}
@@ -299,7 +299,7 @@ namespace ZFS
 	{
 		Context* ctx = (Context*)DokanFileInfo->DokanOptions->GlobalContext;
 
-		wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
+		// wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
 
 		return -ERROR_ACCESS_DENIED;
 	}
@@ -311,7 +311,7 @@ namespace ZFS
 	{
 		Context* ctx = (Context*)DokanFileInfo->DokanOptions->GlobalContext;
 
-		wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
+		// wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
 
 		FileContext* fctx = (FileContext*)DokanFileInfo->Context;
 
@@ -350,7 +350,7 @@ namespace ZFS
 	{
 		Context* ctx = (Context*)DokanFileInfo->DokanOptions->GlobalContext;
 
-		wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
+		// wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
 
 		return -ERROR_ACCESS_DENIED;
 	}
@@ -363,7 +363,7 @@ namespace ZFS
 	{
 		Context* ctx = (Context*)DokanFileInfo->DokanOptions->GlobalContext;
 
-		wprintf(L"[%d] %s: %s %s\n", clock(), __FUNCTIONW__, PathName, SearchPattern);
+		// wprintf(L"[%d] %s: %s %s\n", clock(), __FUNCTIONW__, PathName, SearchPattern);
 
 		if(DokanFileInfo->Context != 0)
 		{
@@ -455,7 +455,7 @@ namespace ZFS
 	{
 		Context* ctx = (Context*)DokanFileInfo->DokanOptions->GlobalContext;
 
-		wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
+		// wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
 
 		return -ERROR_ACCESS_DENIED;
 	}
@@ -469,7 +469,7 @@ namespace ZFS
 	{
 		Context* ctx = (Context*)DokanFileInfo->DokanOptions->GlobalContext;
 
-		wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
+		// wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
 
 		return -ERROR_ACCESS_DENIED;
 	}
@@ -480,7 +480,7 @@ namespace ZFS
 	{
 		Context* ctx = (Context*)DokanFileInfo->DokanOptions->GlobalContext;
 
-		wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
+		// wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
 
 		return -ERROR_ACCESS_DENIED;
 	}
@@ -491,7 +491,7 @@ namespace ZFS
 	{
 		Context* ctx = (Context*)DokanFileInfo->DokanOptions->GlobalContext;
 
-		wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
+		// wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
 
 		return -ERROR_ACCESS_DENIED;
 	}
@@ -504,7 +504,7 @@ namespace ZFS
 	{
 		Context* ctx = (Context*)DokanFileInfo->DokanOptions->GlobalContext;
 
-		wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
+		// wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
 
 		return -ERROR_ACCESS_DENIED;
 	}
@@ -516,7 +516,7 @@ namespace ZFS
 	{
 		Context* ctx = (Context*)DokanFileInfo->DokanOptions->GlobalContext;
 
-		wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
+		// wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
 
 		return -ERROR_ACCESS_DENIED;
 	}
@@ -528,7 +528,7 @@ namespace ZFS
 	{
 		Context* ctx = (Context*)DokanFileInfo->DokanOptions->GlobalContext;
 
-		wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
+		// wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
 
 		return -ERROR_ACCESS_DENIED;
 	}
@@ -541,7 +541,7 @@ namespace ZFS
 	{
 		Context* ctx = (Context*)DokanFileInfo->DokanOptions->GlobalContext;
 
-		wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
+		// wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
 
 		return -ERROR_ACCESS_DENIED;
 	}
@@ -554,7 +554,7 @@ namespace ZFS
 	{
 		Context* ctx = (Context*)DokanFileInfo->DokanOptions->GlobalContext;
 
-		wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
+		// wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
 
 		return -ERROR_ACCESS_DENIED;
 	}
@@ -567,7 +567,7 @@ namespace ZFS
 	{
 		Context* ctx = (Context*)DokanFileInfo->DokanOptions->GlobalContext;
 
-		wprintf(L"[%d] %s\n", clock(), __FUNCTIONW__);
+		// wprintf(L"[%d] %s\n", clock(), __FUNCTIONW__);
 
 		uint64_t total = 0;
 
@@ -629,7 +629,7 @@ namespace ZFS
 	{
 		Context* ctx = (Context*)DokanFileInfo->DokanOptions->GlobalContext;
 
-		wprintf(L"[%d] %s\n", clock(), __FUNCTIONW__);
+		// wprintf(L"[%d] %s\n", clock(), __FUNCTIONW__);
 
 		if(VolumeNameBuffer != NULL)
 		{
@@ -668,7 +668,7 @@ namespace ZFS
 	{
 		Context* ctx = (Context*)DokanFileInfo->DokanOptions->GlobalContext;
 
-		wprintf(L"[%d] %s\n", clock(), __FUNCTIONW__);
+		// wprintf(L"[%d] %s\n", clock(), __FUNCTIONW__);
 
 		return 0;
 	}

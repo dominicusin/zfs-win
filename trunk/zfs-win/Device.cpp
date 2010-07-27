@@ -110,24 +110,34 @@ namespace ZFS
 			{
 				VirtualDevice& vdev = children[(size_t)rm.m_col[i].devidx];
 
-				bool success = false;
-
 				if(vdev.dev != NULL)
 				{
-					if(vdev.dev->Read(p, rm.m_col[i].size, rm.m_col[i].offset + 0x400000) == rm.m_col[i].size)
-					{
-						success = true;
-					}
-				}
-
-				if(!success)
-				{
-					// TODO: reconstruct data
-
-					return false;
+					vdev.dev->BeginRead(p, rm.m_col[i].size, rm.m_col[i].offset + 0x400000);
 				}
 
 				p += rm.m_col[i].size;
+			}
+
+			size_t succeeded = 1;
+
+			for(size_t i = 1; i < rm.m_col.size(); i++) // TODO: nparity > 1
+			{
+				VirtualDevice& vdev = children[(size_t)rm.m_col[i].devidx];
+
+				if(vdev.dev != NULL)
+				{
+					if(vdev.dev->EndRead() == rm.m_col[i].size)
+					{
+						succeeded++;
+					}
+				}
+			}
+
+			if(succeeded < rm.m_col.size())
+			{
+				// TODO: reconstruct data
+
+				return false;
 			}
 
 			return true;
@@ -181,23 +191,27 @@ namespace ZFS
 		: m_handle(NULL)
 		, m_start(0)
 		, m_size(0)
-		, m_offset(0)
 		, m_bytes(0)
 		, m_label(NULL)
 		, m_active(NULL)
 	{
+		memset(&m_overlapped, 0, sizeof(m_overlapped));
+
+		m_overlapped.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);  
 	}
 
 	Device::~Device()
 	{
 		Close();
+
+		CloseHandle(m_overlapped.hEvent); 
 	}
 
 	bool Device::Open(const wchar_t* path, uint32_t partition)
 	{
 		Close();
 
-		m_handle = CreateFile(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, (HANDLE)NULL);
+		m_handle = CreateFile(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN | FILE_FLAG_OVERLAPPED, (HANDLE)NULL);
 
 		if(m_handle == INVALID_HANDLE_VALUE)
 		{
@@ -216,8 +230,6 @@ namespace ZFS
 				m_size = dg.DiskSize.QuadPart;
 			}
 		}
-
-		m_offset = 0;
 
 		for(int i = 0; i < 2; i++, partition >>= 8)
 		{
@@ -291,6 +303,8 @@ namespace ZFS
 	{
 		if(m_handle != NULL)
 		{
+			CancelIo(m_handle);
+
 			CloseHandle(m_handle);
 
 			m_handle = NULL;
@@ -305,7 +319,6 @@ namespace ZFS
 
 		m_start = 0;
 		m_size = 0;
-		m_offset = 0;
 		m_bytes = 0;
 
 		m_active = NULL;
@@ -313,37 +326,41 @@ namespace ZFS
 
 	size_t Device::Read(void* buff, size_t size, uint64_t offset)
 	{
+		return BeginRead(buff, size, offset) ? EndRead() : 0;
+	}
+
+	bool Device::BeginRead(void* buff, size_t size, uint64_t offset)
+	{
 		offset += m_start;
 
-		if(m_offset != offset)
+		m_overlapped.Offset = (DWORD)offset;
+		m_overlapped.OffsetHigh = (DWORD)(offset >> 32);
+
+		if(!ReadFile(m_handle, buff, size, NULL, &m_overlapped))
 		{
-			LARGE_INTEGER li, li2;
-
-			li.QuadPart = offset;
-
-			if(!SetFilePointerEx(m_handle, li, &li2, FILE_BEGIN))
+			switch(GetLastError())
 			{
-				return 0;
-			}
-
-			m_offset = offset;
-		}			
-
-		// printf("[%d] %p %I64d - %I64d (%d) (%I64d)\n", clock(), this, m_offset, m_offset + size, size, m_bytes);
-
-		DWORD read = 0;
-
-		if(size > 0)
-		{
-			if(ReadFile(m_handle, buff, size, &read, NULL))
-			{
-				m_offset += read;
-				m_bytes += read;
+			case ERROR_IO_PENDING:
+				break;
+			case ERROR_HANDLE_EOF:
+				return false;
 			}
 		}
 
-		return read;
+		return true;
 	}
+
+	size_t Device::EndRead()
+	{
+		DWORD size;
+
+		if(GetOverlappedResult(m_handle, &m_overlapped, &size, TRUE))
+		{
+			return (size_t)size;
+		}
+
+		return 0;
+ 	}
 
 	// DeviceDesc
 

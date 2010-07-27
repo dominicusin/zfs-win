@@ -251,19 +251,19 @@ namespace ZFS
 
 			sl.pop_front();
 
-			index = m_head->GetIndex(name.c_str(), index);
+			index = m_head->GetIndex(name.c_str(), ZFS_DIRENT_OBJ(index));
 
-			index = ZFS_DIRENT_OBJ(index);
+			if(index == -1) return false;
+		}
 
-			if(!m_head->Read(index, &dn))
-			{
-				return false;
-			}
+		if(!m_head->Read(ZFS_DIRENT_OBJ(index), &dn))
+		{
+			return false;
+		}
 
-			if(dn.type != DMU_OT_DIRECTORY_CONTENTS && dn.type != DMU_OT_PLAIN_FILE_CONTENTS)
-			{
-				return false;
-			}
+		if(dn.type != DMU_OT_DIRECTORY_CONTENTS && dn.type != DMU_OT_PLAIN_FILE_CONTENTS)
+		{
+			return false;
 		}
 
 		return true;
