@@ -33,7 +33,7 @@ namespace ZFS
 		Pool* m_pool;
 		std::vector<uint8_t> m_objset;
 		std::map<uint64_t, ZapObject*> m_objdir;
-		std::map<uint64_t, dnode_phys_t> m_cache; // TODO: only remember the last few nodes
+		std::map<uint64_t, dnode_phys_t> m_cache;
 		BlockReader* m_reader;
 		uint64_t m_count;
 

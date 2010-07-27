@@ -75,10 +75,10 @@ namespace ZFS
 		HANDLE m_handle;
 		uint64_t m_start;
 		uint64_t m_size;
-		uint64_t m_offset;
 		uint64_t m_bytes;
 		vdev_label_t* m_label;
 		uberblock_t* m_active;
+		OVERLAPPED m_overlapped;
 
 	public:
 		Device();
@@ -88,5 +88,7 @@ namespace ZFS
 		void Close();
 
 		size_t Read(void* buff, size_t size, uint64_t offset);
+		bool BeginRead(void* buff, size_t size, uint64_t offset);
+		size_t EndRead();
 	};
 }

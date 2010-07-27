@@ -126,7 +126,10 @@ namespace ZFS
 
 			dn->pad3[0] = index;
 		
-			m_cache[index] = *dn;
+			if(dn->type != DMU_OT_PLAIN_FILE_CONTENTS)
+			{
+				m_cache[index] = *dn;
+			}
 		}
 
 		return type == DMU_OT_NONE || dn->type == type;
