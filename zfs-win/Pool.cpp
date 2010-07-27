@@ -92,7 +92,7 @@ namespace ZFS
 
 			vdev->GetLeaves(leaves);
 
-			int missing = 0;
+			uint32_t missing = 0;
 
 			for(auto j = leaves.begin(); j != leaves.end(); j++)
 			{

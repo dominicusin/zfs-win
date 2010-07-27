@@ -36,7 +36,7 @@ namespace ZFS
 		RemoveAll();
 	}
 
-	bool DataSet::Init(ObjectSet& os, const char* name, size_t root_index)
+	bool DataSet::Init(ObjectSet& os, const char* name, uint64_t root_index)
 	{
 		RemoveAll();
 
@@ -46,14 +46,14 @@ namespace ZFS
 		
 		if(root_index == -1)
 		{
-			if(!os.Read(os.GetIndex("root_dataset"), &dn, DMU_OT_DSL_DIR))
+			if(!os.Read(os.GetIndex("root_dataset", 1), &dn, DMU_OT_DSL_DIR))
 			{
 				return false;
 			}
 
 			NameValueList nvl;
 
-			if(os.Read(os.GetIndex("config"), nvl))
+			if(os.Read(os.GetIndex("config", 1), nvl))
 			{
 				// TODO: root vdev config
 			}
@@ -68,7 +68,7 @@ namespace ZFS
 
 		m_dir = *(dsl_dir_phys_t*)dn.bonus();
 
-		if(!os.Read((size_t)m_dir.head_dataset_obj, &dn, DMU_OT_DSL_DATASET))
+		if(!os.Read(m_dir.head_dataset_obj, &dn, DMU_OT_DSL_DATASET))
 		{
 			return false;
 		}
@@ -85,24 +85,24 @@ namespace ZFS
 			}
 		}
 
-		ZapObject zap(m_pool);
+		ZapObject* zap = NULL;
 
-		if(os.Read((size_t)m_dir.props_zapobj, zap, DMU_OT_DSL_PROPS))
+		if(os.Read(m_dir.props_zapobj, &zap, DMU_OT_DSL_PROPS))
 		{
-			zap.Lookup("mountpoint", m_mountpoint);
+			zap->Lookup("mountpoint", m_mountpoint);
 		}
 
-		if(os.Read((size_t)m_dir.child_dir_zapobj, zap, DMU_OT_DSL_DIR_CHILD_MAP))
+		if(os.Read(m_dir.child_dir_zapobj, &zap, DMU_OT_DSL_DIR_CHILD_MAP))
 		{
-			for(auto i = zap.begin(); i != zap.end(); i++)
+			for(auto i = zap->begin(); i != zap->end(); i++)
 			{
 				uint64_t index;
 
-				if(zap.Lookup(i->first.c_str(), index))
+				if(zap->Lookup(i->first.c_str(), index))
 				{
 					DataSet* ds = new DataSet(m_pool);
 
-					if(ds->Init(os, i->first.c_str(), (size_t)index))
+					if(ds->Init(os, i->first.c_str(), index))
 					{
 						m_children.push_back(ds);
 					}
@@ -239,82 +239,32 @@ namespace ZFS
 			return false;
 		}
 
-		auto it = m_cache.find(L"");
+		std::list<std::wstring> sl;
 
-		if(it != m_cache.end())
+		Util::Explode(Util::TrimRight(L"ROOT" + s, L"/"), sl, L"/");
+
+		uint64_t index = 1;
+
+		while(!sl.empty())
 		{
-			dn = it->second;
-		}
-		else
-		{
-			if(!m_head->Read(m_head->GetIndex("ROOT"), &dn, DMU_OT_DIRECTORY_CONTENTS))
+			std::string name = Util::UTF16To8(sl.front().c_str());
+
+			sl.pop_front();
+
+			index = m_head->GetIndex(name.c_str(), index);
+
+			index = ZFS_DIRENT_OBJ(index);
+
+			if(!m_head->Read(index, &dn))
 			{
 				return false;
 			}
 
-			m_cache[L""] = dn;
-		}
-
-		if(s == L"/")
-		{
-			return true;
-		}
-
-		std::wstring::size_type i = 1;
-
-		do
-		{
-			if(dn.type != DMU_OT_DIRECTORY_CONTENTS)
+			if(dn.type != DMU_OT_DIRECTORY_CONTENTS && dn.type != DMU_OT_PLAIN_FILE_CONTENTS)
 			{
 				return false;
 			}
-
-			std::wstring::size_type j = s.find('/', i);
-		
-			std::wstring dir = s.substr(i, j - i);
-
-			i = j != std::string::npos ? j + 1 : std::string::npos;
-
-			auto it = m_cache.find(s.substr(0, j));
-
-			if(it != m_cache.end())
-			{
-				dn = it->second;
-			}
-			else
-			{
-				ZFS::ZapObject zap(m_pool);
-
-				if(!zap.Init(&dn))
-				{
-					return false;
-				}
-
-				std::string name = Util::UTF16To8(dir.c_str());
-
-				uint64_t index = 0;
-
-				if(!zap.Lookup(name.c_str(), index))
-				{
-					return false;
-				}
-
-				if(!m_head->Read((size_t)ZFS_DIRENT_OBJ(index), &dn))
-				{
-					return false;
-				}
-
-				if(dn.type != DMU_OT_DIRECTORY_CONTENTS && dn.type != DMU_OT_PLAIN_FILE_CONTENTS)
-				{
-					return false;
-				}
-
-				m_cache[s.substr(0, j)] = dn;
-			}
 		}
-		while(i != std::string::npos);
-
-		if(m_cache.size() > 100) m_cache.clear(); // FIXME: keep mru
 
 		return true;
 	}
