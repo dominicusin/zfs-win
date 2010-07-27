@@ -47,7 +47,7 @@ namespace ZFS
 		std::vector<VirtualDevice> children;
 
 		void Init(NameValueList* nvl);
-		bool Read(std::vector<uint8_t>& buff, uint64_t size, uint64_t offset);
+		bool Read(std::vector<uint8_t>& buff, size_t size, uint64_t offset);
 		VirtualDevice* Find(uint64_t guid_to_find);
 		void GetLeaves(std::list<VirtualDevice*>& leaves);
 	};
@@ -75,6 +75,7 @@ namespace ZFS
 		HANDLE m_handle;
 		uint64_t m_start;
 		uint64_t m_size;
+		uint64_t m_offset;
 		uint64_t m_bytes;
 		vdev_label_t* m_label;
 		uberblock_t* m_active;
@@ -86,7 +87,6 @@ namespace ZFS
 		bool Open(const wchar_t* path, uint32_t partition = 0); // partition 0x0000EEPP (PP primary, EE extended, zero based index)
 		void Close();
 
-		uint64_t Seek(uint64_t pos);
-		size_t Read(void* buff, uint64_t size);
+		size_t Read(void* buff, size_t size, uint64_t offset);
 	};
 }

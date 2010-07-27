@@ -35,6 +35,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <tchar.h>
+#include <time.h>
 #include <vector>
 #include <list>
 #include <map>

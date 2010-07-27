@@ -26,7 +26,6 @@ namespace ZFS
 {
 	ObjectSet::ObjectSet(Pool* pool)
 		: m_pool(pool)
-		, m_objdir(pool)
 		, m_reader(NULL)
 		, m_count(0)
 	{
@@ -34,20 +33,32 @@ namespace ZFS
 
 	ObjectSet::~ObjectSet()
 	{
+		RemoveAll();
+	}
+
+	void ObjectSet::RemoveAll()
+	{
+		for(auto i = m_objdir.begin(); i != m_objdir.end(); i++)
+		{
+			delete i->second;
+		}
+
+		m_objdir.clear();
+
+		m_cache.clear();
+
 		delete m_reader;
+
+		m_reader = NULL;
+
+		m_count = 0;
 	}
 
 	bool ObjectSet::Init(blkptr_t* bp)
 	{
 		ASSERT(bp->type == DMU_OT_OBJSET);
 		
-		{
-			delete m_reader;
-
-			m_objset.clear();
-			m_reader = NULL;
-			m_count = 0;
-		}
+		RemoveAll();
 
 		ASSERT(bp->lvl == 0); // must not be indirect
 
@@ -65,66 +76,95 @@ namespace ZFS
 
 		m_reader = new BlockReader(m_pool, &os->meta_dnode);
 
-		m_count = (size_t)(m_reader->GetDataSize() / sizeof(dnode_phys_t));
-
-		if(os->type == DMU_OST_META || os->type == DMU_OST_ZFS)
-		{
-			if(!Read(1, m_objdir, os->type == DMU_OST_META ? DMU_OT_OBJECT_DIRECTORY : DMU_OT_MASTER_NODE))
-			{
-				return false;
-			}
-		}
+		m_count = m_reader->GetDataSize() / sizeof(dnode_phys_t);
 
 		return true;
 	}
 
-	size_t ObjectSet::GetIndex(const char* name)
+	uint64_t ObjectSet::GetIndex(const char* name, uint64_t parent_index)
 	{
-		uint64_t index;
+		ZapObject* zap = NULL;
 
-		if(!m_objdir.Lookup(name, index))
+		if(!Read(parent_index, &zap))
 		{
-			index = -1;
+			return -1;
 		}
 
-		return (size_t)index;
+		uint64_t index;
+
+		if(!zap->Lookup(name, index))
+		{
+			return -1;
+		}
+
+		return index;
 	}
 
-	bool ObjectSet::Read(size_t index, dnode_phys_t* dn, dmu_object_type type)
+	bool ObjectSet::Read(uint64_t index, dnode_phys_t* dn, dmu_object_type type)
 	{
+		ASSERT(index == -1 || index < UINT_MAX);
+
 		if(index >= m_count || dn == NULL) 
 		{	
 			return false;
 		}
 
-		size_t size = sizeof(dnode_phys_t);
+		auto i = m_cache.find(index);
 
-		if(m_reader->Read(dn, size, (uint64_t)index * sizeof(dnode_phys_t)) != size)
+		if(i != m_cache.end())
 		{
-			return false;
+			*dn = i->second;
+		}
+		else
+		{
+			size_t size = sizeof(dnode_phys_t);
+
+			if(m_reader->Read(dn, size, index * size) != size)
+			{
+				return false;
+			}
+
+			dn->pad3[0] = index;
+		
+			m_cache[index] = *dn;
 		}
 
 		return type == DMU_OT_NONE || dn->type == type;
 	}
 
-	bool ObjectSet::Read(size_t index, ZapObject& zap, dmu_object_type type)
+	bool ObjectSet::Read(uint64_t index, ZapObject** zap, dmu_object_type type)
 	{
-		dnode_phys_t dn;
+		auto i = m_objdir.find(index);
 
-		if(!Read(index, &dn, type))
+		if(i == m_objdir.end())
 		{
-			return false;
+			dnode_phys_t dn;
+
+			if(!Read(index, &dn, type))
+			{
+				return false;
+			}
+
+			*zap = new ZapObject(m_pool);
+
+			if(!(*zap)->Init(&dn))
+			{
+				delete *zap;
+
+				return false;
+			}
+
+			m_objdir[index] = *zap;
 		}
-
-		if(!zap.Init(&dn))
+		else
 		{
-			return false;
+			*zap = i->second;
 		}
 
 		return true;
 	}
 
-	bool ObjectSet::Read(size_t index, NameValueList& nvl)
+	bool ObjectSet::Read(uint64_t index, NameValueList& nvl)
 	{
 		dnode_phys_t dn;
 

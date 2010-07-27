@@ -760,7 +760,7 @@ struct ddt_key_t
  * ddk_prop layout:
  *
  *	+-------+-------+-------+-------+-------+-------+-------+-------+
- *	|   0	|   0	|   0	| comp	|     PSIZE	|     LSIZE	|
+ *	|   0	|   0	|   0	| comp	|     PSIZE	    |     LSIZE     |
  *	+-------+-------+-------+-------+-------+-------+-------+-------+
  */
 
@@ -1007,9 +1007,9 @@ struct znode_phys_t
 
 struct raidz_col_t
 {
-	uint64_t devidx; /* child device index for I/O */
+	uint32_t devidx; /* child device index for I/O */
+	uint32_t size; /* I/O size */
 	uint64_t offset; /* device offset */
-	uint64_t size; /* I/O size */
 };
 
 class raidz_map_t
@@ -1019,24 +1019,24 @@ public:
 	uint32_t m_scols; /* Count including skipped columns */
 	uint32_t m_bigcols; /* Number of oversized columns */
 	uint32_t m_firstdatacol; /* First data column/parity count */
-	uint64_t m_nskip; /* Skipped sectors for padding */
+	uint32_t m_nskip; /* Skipped sectors for padding */
 	uint32_t m_skipstart; /* Column index of padding start */
-	uint64_t m_asize; /* Actual total I/O size */
+	uint32_t m_asize; /* Actual total I/O size */
 	std::vector<raidz_col_t> m_col; /* Flexible array of I/O columns */
 	
 public:
-	raidz_map_t(uint64_t offset, uint64_t psize, uint32_t ashift, uint32_t dcols, uint32_t nparity)
+	raidz_map_t(uint64_t offset, uint32_t psize, uint32_t ashift, uint32_t dcols, uint32_t nparity)
 		: m_cols(dcols)
 		, m_scols(dcols)
 	{
 		uint64_t b = offset >> ashift;
-		uint64_t s = psize >> ashift;
+		uint32_t s = psize >> ashift;
 		uint32_t f = (uint32_t)(b % dcols);
 		uint64_t o = (b / dcols) << ashift;
-		uint64_t q = s / (dcols - nparity);
-		uint32_t r = (uint32_t)(s - q * (dcols - nparity));
+		uint32_t q = s / (dcols - nparity);
+		uint32_t r = s - q * (dcols - nparity);
 		uint32_t bc = (r == 0 ? 0 : r + nparity);
-		uint64_t tot = s + nparity * (q + (r == 0 ? 0 : 1));
+		uint32_t tot = s + nparity * (q + (r == 0 ? 0 : 1));
 
 		if(q == 0)
 		{
@@ -1052,7 +1052,7 @@ public:
 
 		m_col.resize(m_scols);
 
-		uint64_t asize = 0;
+		uint32_t asize = 0;
 
 		for(uint32_t c = 0; c < m_scols; c++)
 		{
@@ -1110,7 +1110,7 @@ public:
 
 		if(m_firstdatacol == 1 && (offset & (1ULL << 20)))
 		{
-			uint64_t devidx = m_col[0].devidx;
+			uint32_t devidx = m_col[0].devidx;
 			uint64_t offset = m_col[0].offset;
 			m_col[0].devidx = m_col[1].devidx;
 			m_col[0].offset = m_col[1].offset;

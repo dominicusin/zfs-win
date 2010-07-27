@@ -56,20 +56,18 @@ namespace ZFS
 		}
 	}
 
-	bool VirtualDevice::Read(std::vector<uint8_t>& buff, uint64_t size, uint64_t offset)
+	bool VirtualDevice::Read(std::vector<uint8_t>& buff, size_t size, uint64_t offset)
 	{
 		// TODO: handle chksum errors
 		// TODO: parallel reads with overlapped i/o
 
-		buff.resize((size_t)size);
+		buff.resize(size);
 
 		if(type == "disk" || type == "file")
 		{
 			if(dev != NULL)
 			{
-				dev->Seek(offset + 0x400000);
-
-				if(dev->Read(buff.data(), size) == size)
+				if(dev->Read(buff.data(), size, offset + 0x400000) == size)
 				{
 					return true;
 				}
@@ -83,9 +81,7 @@ namespace ZFS
 
 				if(vdev.dev != NULL)
 				{
-					vdev.dev->Seek(offset + 0x400000);
-
-					if(vdev.dev->Read(buff.data(), size) == size)
+					if(vdev.dev->Read(buff.data(), size, offset + 0x400000) == size)
 					{
 						return true;
 					}
@@ -110,7 +106,7 @@ namespace ZFS
 
 			uint8_t* p = buff.data();
 
-			for(size_t i = 1; i < rm.m_col.size(); i++)
+			for(size_t i = 1; i < rm.m_col.size(); i++) // TODO: nparity > 1
 			{
 				VirtualDevice& vdev = children[(size_t)rm.m_col[i].devidx];
 
@@ -118,9 +114,10 @@ namespace ZFS
 
 				if(vdev.dev != NULL)
 				{
-					vdev.dev->Seek(rm.m_col[i].offset + 0x400000);
-					
-					success = vdev.dev->Read(p, rm.m_col[i].size) == rm.m_col[i].size;
+					if(vdev.dev->Read(p, rm.m_col[i].size, rm.m_col[i].offset + 0x400000) == rm.m_col[i].size)
+					{
+						success = true;
+					}
 				}
 
 				if(!success)
@@ -184,6 +181,7 @@ namespace ZFS
 		: m_handle(NULL)
 		, m_start(0)
 		, m_size(0)
+		, m_offset(0)
 		, m_bytes(0)
 		, m_label(NULL)
 		, m_active(NULL)
@@ -219,11 +217,13 @@ namespace ZFS
 			}
 		}
 
+		m_offset = 0;
+
 		for(int i = 0; i < 2; i++, partition >>= 8)
 		{
 			uint8_t mbr[0x200];
 
-			Read(mbr, sizeof(mbr));
+			Read(mbr, sizeof(mbr), 0);
 
 			if(mbr[0x1fe] == 0x55 || mbr[0x1ff] == 0xaa)
 			{
@@ -246,13 +246,11 @@ namespace ZFS
 					}
 				}
 			}
-
-			Seek(0);
 		}
 
 		m_label = new vdev_label_t();
 
-		Read(m_label, sizeof(vdev_label_t));
+		Read(m_label, sizeof(vdev_label_t), 0);
 
 		if(m_label->vdev_phys.zbt.magic != ZEC_MAGIC)
 		{
@@ -307,46 +305,44 @@ namespace ZFS
 
 		m_start = 0;
 		m_size = 0;
+		m_offset = 0;
 		m_bytes = 0;
 
 		m_active = NULL;
 	}
 
-	uint64_t Device::Seek(uint64_t pos)
+	size_t Device::Read(void* buff, size_t size, uint64_t offset)
 	{
-		LARGE_INTEGER li, li2;
+		offset += m_start;
 
-		li.QuadPart = m_start + pos;
-
-		if(SetFilePointerEx(m_handle, li, &li2, FILE_BEGIN))
-		{
-			return li2.QuadPart;
-		}
-
-		return (uint64_t)-1;
-	}
-
-	size_t Device::Read(void* buff, uint64_t size)
-	{
-		if(0)
+		if(m_offset != offset)
 		{
 			LARGE_INTEGER li, li2;
 
-			li.QuadPart = 0;
+			li.QuadPart = offset;
 
-			if(SetFilePointerEx(m_handle, li, &li2, FILE_CURRENT))
+			if(!SetFilePointerEx(m_handle, li, &li2, FILE_BEGIN))
 			{
-				printf("%I64d - %I64d (%I64d) (%I64d)\n", li2.QuadPart, li2.QuadPart + size, size, m_bytes);
+				return 0;
 			}
-		}
+
+			m_offset = offset;
+		}			
+
+		// printf("[%d] %p %I64d - %I64d (%d) (%I64d)\n", clock(), this, m_offset, m_offset + size, size, m_bytes);
 
 		DWORD read = 0;
 
-		ReadFile(m_handle, buff, (DWORD)size, &read, NULL);
+		if(size > 0)
+		{
+			if(ReadFile(m_handle, buff, size, &read, NULL))
+			{
+				m_offset += read;
+				m_bytes += read;
+			}
+		}
 
-		m_bytes += read;
-
-		return (size_t)read;
+		return read;
 	}
 
 	// DeviceDesc

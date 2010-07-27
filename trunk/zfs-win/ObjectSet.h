@@ -32,9 +32,12 @@ namespace ZFS
 	{
 		Pool* m_pool;
 		std::vector<uint8_t> m_objset;
-		ZapObject m_objdir;
+		std::map<uint64_t, ZapObject*> m_objdir;
+		std::map<uint64_t, dnode_phys_t> m_cache; // TODO: only remember the last few nodes
 		BlockReader* m_reader;
-		size_t m_count;
+		uint64_t m_count;
+
+		void RemoveAll();
 
 	public:
 		ObjectSet(Pool* pool);
@@ -42,12 +45,12 @@ namespace ZFS
 
 		bool Init(blkptr_t* bp);
 
-		size_t GetCount() {return m_count;}
-		size_t GetIndex(const char* name);
+		uint64_t GetCount() {return m_count;}
+		uint64_t GetIndex(const char* name, uint64_t parent_index);
 
-		bool Read(size_t index, dnode_phys_t* dn, dmu_object_type type = DMU_OT_NONE);
-		bool Read(size_t index, ZapObject& zap, dmu_object_type type = DMU_OT_NONE);
-		bool Read(size_t index, NameValueList& nvl);
+		bool Read(uint64_t index, dnode_phys_t* dn, dmu_object_type type = DMU_OT_NONE);
+		bool Read(uint64_t index, ZapObject** zap, dmu_object_type type = DMU_OT_NONE);
+		bool Read(uint64_t index, NameValueList& nvl);
 
 		objset_phys_t* operator -> () {return (objset_phys_t*)m_objset.data();}
 	};
