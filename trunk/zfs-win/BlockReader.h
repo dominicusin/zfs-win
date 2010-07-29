@@ -35,10 +35,9 @@ namespace ZFS
 		size_t m_indblksize;
 		size_t m_indblkcount;
 		uint64_t m_size;
-		struct {uint64_t id; std::vector<uint8_t> buff;} m_cache;
+		struct {uint64_t id; uint8_t* buff;} m_cache;
 
-		typedef std::vector<blkptr_t> blkcol_t;
-		typedef std::vector<blkcol_t*> blklvl_t;
+		typedef std::vector<blkptr_t*> blklvl_t;
 		typedef std::vector<blklvl_t> blktree_t;
 
 		blktree_t m_tree;

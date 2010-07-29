@@ -151,9 +151,20 @@ namespace ZFS
 		m_vdevs.clear();
 	}
 
-	bool Pool::Read(std::vector<uint8_t>& dst, blkptr_t* bp)
+	bool Pool::Read(uint8_t* dst, size_t size, blkptr_t* bp)
 	{
-		for(int i = 0; i < 3; i++)
+		ASSERT(((UINT_PTR)dst & 15) == 0);
+
+		bool succeeded = false;
+
+		size_t psize = ((size_t)bp->psize + 1) << 9;
+		size_t lsize = ((size_t)bp->lsize + 1) << 9;
+
+		if(size < lsize) return false;
+
+		uint8_t* src = bp->comp_type != ZIO_COMPRESS_OFF ? (uint8_t*)_aligned_malloc(psize, 16) : NULL;
+
+		for(int i = 0; i < 3 && !succeeded; i++)
 		{
 			dva_t* addr = &bp->blk_dva[i];
 
@@ -163,105 +174,52 @@ namespace ZFS
 			{
 				VirtualDevice* vdev = *i;
 
-				if(vdev->id != addr->vdev)
+				if(vdev->id == addr->vdev)
 				{
-					continue;
-				}
-
-				// << 9 or vdev->ashift? 
-				//
-				// on-disk spec says: "All sizes are stored as the number of 512 byte sectors (minus one) needed to
-				// represent the size of this block.", but is it still true or outdated?
-
-				size_t psize = ((size_t)bp->psize + 1) << 9;
-				size_t lsize = ((size_t)bp->lsize + 1) << 9;
-
-				std::vector<uint8_t> src(psize);
-
-				if(!vdev->Read(src, psize, addr->offset << 9))
-				{
-					continue;
-				}
-
-				if(Verify(src, bp->cksum_type, bp->cksum))
-				{
-					if(Decompress(src, dst, lsize, bp->comp_type))
+					if(bp->comp_type == ZIO_COMPRESS_OFF)
 					{
-						return true;
+						if(vdev->Read(dst, psize, addr->offset << 9))
+						{
+							if(Verify(dst, psize, bp->cksum_type, bp->cksum))
+							{
+								succeeded = true;
+
+								break;
+							}
+						}
+					}
+					else
+					{
+						if(vdev->Read(src, psize, addr->offset << 9))
+						{
+							if(Verify(src, psize, bp->cksum_type, bp->cksum))
+							{
+								if(ZFS::decompress(src, dst, psize, lsize, bp->comp_type))
+								{
+									succeeded = true;
+
+									break;
+								}
+							}
+						}
 					}
 				}
 			}
 		}
 
-		return false;
+		if(src != NULL) _aligned_free(src);
+
+		return succeeded;
 	}
 
-	bool Pool::Verify(std::vector<uint8_t>& buff, uint8_t cksum_type, cksum_t& cksum)
+	bool Pool::Verify(uint8_t* buff, size_t size, uint8_t cksum_type, cksum_t& cksum)
 	{
 		cksum_t c;
 
-		memset(&c, 0, sizeof(c));
-
-		switch(cksum_type)
-		{
-		case ZIO_CHECKSUM_OFF:
-			return true;
-		case ZIO_CHECKSUM_ON: // ???
-		case ZIO_CHECKSUM_ZILOG:
-		case ZIO_CHECKSUM_FLETCHER_2:
-			fletcher_2_native(buff.data(), buff.size(), &c);
-			break;
-		case ZIO_CHECKSUM_ZILOG2:
-		case ZIO_CHECKSUM_FLETCHER_4:
-			fletcher_4_native(buff.data(), buff.size(), &c);
-			break;
-		case ZIO_CHECKSUM_LABEL:
-		case ZIO_CHECKSUM_GANG_HEADER:
-		case ZIO_CHECKSUM_SHA256:
-			sha256(buff.data(), buff.size(), &c); // TESTME
-			break;
-		default:
-			ASSERT(0);
-			return false;
-		}
+		ZFS::hash(buff, size, &c, cksum_type);
 
 		ASSERT(cksum == c);
 
 		return cksum == c;
-	}
-
-	bool Pool::Decompress(std::vector<uint8_t>& src, std::vector<uint8_t>& dst, size_t lsize, uint8_t comp_type)
-	{
-		switch(comp_type)
-		{
-		case ZIO_COMPRESS_ON: // ???
-		case ZIO_COMPRESS_LZJB:
-			dst.resize(lsize);
-			lzjb_decompress(src.data(), dst.data(), src.size(), lsize);
-			break;
-		case ZIO_COMPRESS_OFF:
-		case ZIO_COMPRESS_EMPTY: // ???
-			dst.swap(src);
-			break;
-		case ZIO_COMPRESS_GZIP_1:
-		case ZIO_COMPRESS_GZIP_2:
-		case ZIO_COMPRESS_GZIP_3:
-		case ZIO_COMPRESS_GZIP_4:
-		case ZIO_COMPRESS_GZIP_5:
-		case ZIO_COMPRESS_GZIP_6:
-		case ZIO_COMPRESS_GZIP_7:
-		case ZIO_COMPRESS_GZIP_8:
-		case ZIO_COMPRESS_GZIP_9:
-			gzip_decompress(src.data(), dst.data(), src.size(), lsize); // TESTME
-			break;
-		case ZIO_COMPRESS_ZLE:
-			zle_decompress(src.data(), dst.data(), src.size(), lsize, 64); // TESTME
-			break;
-		default:
-			ASSERT(0);
-			return false;
-		}
-
-		return true;
 	}
 }

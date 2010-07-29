@@ -47,7 +47,7 @@
  * source length if compression would overflow the destination buffer.
  */
 
-size_t lzjb_compress(void* s_start, void* d_start, size_t s_len, size_t d_len)
+size_t lzjb_compress(void* s_start, void* d_start, size_t s_len, size_t d_len, int n)
 {
 	uint8_t* src = (uint8_t*)s_start;
 	uint8_t* dst = (uint8_t*)d_start;
@@ -254,8 +254,10 @@ size_t zle_compress(void* s_start, void* d_start, size_t s_len, size_t d_len, in
 	return src == s_end ? dst - (uint8_t*)d_start : s_len;
 }
 
-int zle_decompress(void* s_start, void* d_start, size_t s_len, size_t d_len, int n)
+int zle_decompress_64(void* s_start, void* d_start, size_t s_len, size_t d_len)
 {
+	const int n = 64;
+
 	uint8_t* src = (uint8_t*)s_start;
 	uint8_t* dst = (uint8_t*)d_start;
 	uint8_t* s_end = src + s_len;
@@ -284,4 +286,53 @@ int zle_decompress(void* s_start, void* d_start, size_t s_len, size_t d_len, int
 	}
 
 	return dst == d_end ? 0 : -1;
+}
+
+int copy_decompress(void* s_start, void* d_start, size_t s_len, size_t d_len)
+{
+	ASSERT(s_len == d_len);
+
+	size_t size = std::min<size_t>(s_len, d_len);
+
+	memcpy(d_start, s_start, size);
+
+	return size;
+}
+
+typedef int (*decompress_func_t)(void* s_start, void* d_start, size_t s_len, size_t d_len);
+
+static decompress_func_t s_decompress_func[] = 
+{
+	NULL, // ZIO_COMPRESS_INHERIT
+	lzjb_decompress, // ZIO_COMPRESS_ON
+	copy_decompress, // ZIO_COMPRESS_OFF
+	lzjb_decompress, // ZIO_COMPRESS_LZJB
+	NULL, // ZIO_COMPRESS_EMPTY
+	gzip_decompress, // ZIO_COMPRESS_GZIP_1
+	gzip_decompress, // ZIO_COMPRESS_GZIP_2
+	gzip_decompress, // ZIO_COMPRESS_GZIP_3
+	gzip_decompress, // ZIO_COMPRESS_GZIP_4
+	gzip_decompress, // ZIO_COMPRESS_GZIP_5
+	gzip_decompress, // ZIO_COMPRESS_GZIP_6
+	gzip_decompress, // ZIO_COMPRESS_GZIP_7
+	gzip_decompress, // ZIO_COMPRESS_GZIP_8
+	gzip_decompress, // ZIO_COMPRESS_GZIP_9
+	zle_decompress_64, // ZIO_COMPRESS_ZLE
+};
+
+bool ZFS::decompress(void* src, void* dst, size_t psize, size_t lsize, uint8_t comp_type)
+{
+	if(comp_type < sizeof(s_decompress_func) / sizeof(s_decompress_func[0]))
+	{
+		decompress_func_t f = s_decompress_func[comp_type];
+
+		if(f != NULL)
+		{
+			f(src, dst, psize, lsize);
+
+			return true;
+		}
+	}
+
+	return false;
 }

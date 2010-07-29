@@ -128,7 +128,7 @@
 #include "stdafx.h"
 #include "Hash.h"
 
-void fletcher_2_native(const void* buf, uint64_t size, cksum_t* zcp)
+static void fletcher_2(const void* buf, uint64_t size, cksum_t* zcp)
 {
 	const uint64_t* ip = (const uint64_t*)buf;
 	const uint64_t* ipend = ip + (size / sizeof(uint64_t));
@@ -146,25 +146,25 @@ void fletcher_2_native(const void* buf, uint64_t size, cksum_t* zcp)
 	zcp->set(a0, a1, b0, b1);
 }
 
-void fletcher_2_byteswap(const void* buf, uint64_t size, cksum_t* zcp)
+static void fletcher_2_sse2(const void* buf, uint64_t size, cksum_t* zcp) // ~25% faster
 {
-	const uint64_t* ip = (const uint64_t*)buf;
-	const uint64_t* ipend = ip + (size / sizeof(uint64_t));
+	const __m128i* p = (__m128i*)buf;
+	
+	__m128i a = _mm_setzero_si128();
+	__m128i b = _mm_setzero_si128();
 
-	uint64_t a0, b0, a1, b1;
-
-	for(a0 = b0 = a1 = b1 = 0; ip < ipend; ip += 2)
+	for(size_t i = 0, j = (size_t)(size >> 4); i < j; i++)
 	{
-		a0 += BSWAP_64(ip[0]);
-		a1 += BSWAP_64(ip[1]);
-		b0 += a0;
-		b1 += a1;
+		__m128i r = _mm_load_si128(&p[i]);
+
+		a = _mm_add_epi64(a, r);
+		b = _mm_add_epi64(b, a);
 	}
 
-	zcp->set(a0, a1, b0, b1);
+	zcp->set(a.m128i_u64[0], a.m128i_u64[1], b.m128i_u64[0], b.m128i_u64[1]);
 }
 
-void fletcher_4_native(const void* buf, uint64_t size, cksum_t* zcp)
+static void fletcher_4(const void* buf, uint64_t size, cksum_t* zcp)
 {
 	const uint32_t* ip = (const uint32_t*)buf;
 	const uint32_t* ipend = ip + (size / sizeof(uint32_t));
@@ -182,71 +182,7 @@ void fletcher_4_native(const void* buf, uint64_t size, cksum_t* zcp)
 	zcp->set(a, b, c, d);
 }
 
-void fletcher_4_byteswap(const void* buf, uint64_t size, cksum_t* zcp)
-{
-	const uint32_t* ip = (const uint32_t*)buf;
-	const uint32_t* ipend = ip + (size / sizeof(uint32_t));
-
-	uint64_t a, b, c, d;
-
-	for(a = b = c = d = 0; ip < ipend; ip++)
-	{
-		a += BSWAP_32(ip[0]);
-		b += a;
-		c += b;
-		d += c;
-	}
-
-	zcp->set(a, b, c, d);
-}
-
-void fletcher_4_incremental_native(const void* buf, uint64_t size, cksum_t* zcp)
-{
-	const uint32_t* ip = (const uint32_t*)buf;
-	const uint32_t* ipend = ip + (size / sizeof(uint32_t));
-
-	uint64_t a, b, c, d;
-
-	a = zcp->word[0];
-	b = zcp->word[1];
-	c = zcp->word[2];
-	d = zcp->word[3];
-
-	for(; ip < ipend; ip++)
-	{
-		a += ip[0];
-		b += a;
-		c += b;
-		d += c;
-	}
-
-	zcp->set(a, b, c, d);
-}
-
-void fletcher_4_incremental_byteswap(const void* buf, uint64_t size, cksum_t* zcp)
-{
-	const uint32_t* ip = (const uint32_t*)buf;
-	const uint32_t* ipend = ip + (size / sizeof(uint32_t));
-
-	uint64_t a, b, c, d;
-
-	a = zcp->word[0];
-	b = zcp->word[1];
-	c = zcp->word[2];
-	d = zcp->word[3];
-
-	for(; ip < ipend; ip++)
-	{
-		a += BSWAP_32(ip[0]);
-		b += a;
-		c += b;
-		d += c;
-	}
-
-	zcp->set(a, b, c, d);
-}
-
-void sha256(const void* buf, uint64_t size, cksum_t* zcp)
+static void sha256(const void* buf, uint64_t size, cksum_t* zcp)
 {
 	HCRYPTPROV hCryptProv; 
 	HCRYPTHASH hHash; 
@@ -272,4 +208,57 @@ void sha256(const void* buf, uint64_t size, cksum_t* zcp)
 
 	CryptDestroyHash(hHash); 
 	CryptReleaseContext(hCryptProv, 0); 
+}
+
+typedef void (*cksum_func_t)(const void* buf, uint64_t size, cksum_t* zcp);
+
+static struct cksum_func_struct
+{
+	cksum_func_t f[ZIO_CHECKSUM_FUNCTIONS];
+
+	struct cksum_func_struct()
+	{
+		f[ZIO_CHECKSUM_INHERIT] = NULL;
+		f[ZIO_CHECKSUM_ON] = fletcher_2;
+		f[ZIO_CHECKSUM_OFF] = NULL;
+		f[ZIO_CHECKSUM_LABEL] = sha256;
+		f[ZIO_CHECKSUM_GANG_HEADER] = sha256;
+		f[ZIO_CHECKSUM_ZILOG] = fletcher_2;
+		f[ZIO_CHECKSUM_FLETCHER_2] = fletcher_2;
+		f[ZIO_CHECKSUM_FLETCHER_4] = fletcher_4;
+		f[ZIO_CHECKSUM_SHA256] = sha256;
+		f[ZIO_CHECKSUM_ZILOG2] = fletcher_4;
+
+		int buff[4];
+
+		__cpuid(buff, 0x80000000);
+
+		if((DWORD)buff[0] >= 1)
+		{
+			__cpuid(buff, 1);
+
+			if(buff[3] & (1 << 26)) // SSE2
+			{
+				f[ZIO_CHECKSUM_ON] = fletcher_2_sse2;
+				f[ZIO_CHECKSUM_ZILOG] = fletcher_2_sse2;
+				f[ZIO_CHECKSUM_FLETCHER_2] = fletcher_2_sse2;
+			}
+		}
+	}
+
+} s_cksum_func;
+
+void ZFS::hash(const void* buf, uint64_t size, cksum_t* zcp, uint8_t cksum_type)
+{
+	memset(zcp, 0, sizeof(*zcp));
+
+	if(cksum_type < sizeof(s_cksum_func.f) / sizeof(s_cksum_func.f[0]))
+	{
+		cksum_func_t f = s_cksum_func.f[cksum_type];
+
+		if(f != NULL)
+		{
+			f(buf, size, zcp);
+		}
+	}
 }

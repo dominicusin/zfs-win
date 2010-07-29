@@ -62,19 +62,25 @@ namespace ZFS
 
 		ASSERT(bp->lvl == 0); // must not be indirect
 
-		if(!m_pool->Read(m_objset, bp))
+		uint8_t* buff = (uint8_t*)_aligned_malloc(sizeof(m_objset), 16);
+
+		if(m_pool->Read(buff, sizeof(m_objset), bp))
+		{
+			memcpy(&m_objset, buff, sizeof(m_objset));
+		}
+		else
+		{
+			memset(&m_objset, 0, sizeof(m_objset));
+		}
+
+		_aligned_free(buff);
+
+		if(m_objset.meta_dnode.type != DMU_OT_DNODE)
 		{
 			return false;
 		}
 
-		objset_phys_t* os = (objset_phys_t*)m_objset.data();
-
-		if(os->meta_dnode.type != DMU_OT_DNODE)
-		{
-			return false;
-		}
-
-		m_reader = new BlockReader(m_pool, &os->meta_dnode);
+		m_reader = new BlockReader(m_pool, &m_objset.meta_dnode);
 
 		m_count = m_reader->GetDataSize() / sizeof(dnode_phys_t);
 

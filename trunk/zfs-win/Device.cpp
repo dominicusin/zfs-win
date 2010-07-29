@@ -56,18 +56,16 @@ namespace ZFS
 		}
 	}
 
-	bool VirtualDevice::Read(std::vector<uint8_t>& buff, size_t size, uint64_t offset)
+	bool VirtualDevice::Read(uint8_t* buff, size_t size, uint64_t offset)
 	{
 		// TODO: handle chksum errors
 		// TODO: parallel reads with overlapped i/o
-
-		buff.resize(size);
 
 		if(type == "disk" || type == "file")
 		{
 			if(dev != NULL)
 			{
-				if(dev->Read(buff.data(), size, offset + 0x400000) == size)
+				if(dev->Read(buff, size, offset + 0x400000) == size)
 				{
 					return true;
 				}
@@ -81,7 +79,7 @@ namespace ZFS
 
 				if(vdev.dev != NULL)
 				{
-					if(vdev.dev->Read(buff.data(), size, offset + 0x400000) == size)
+					if(vdev.dev->Read(buff, size, offset + 0x400000) == size)
 					{
 						return true;
 					}
@@ -99,12 +97,12 @@ namespace ZFS
 				total += rm.m_col[i].size;
 			}
 
-			if(total > buff.size())
+			if(total > size)
 			{
 				return false;
 			}
 
-			uint8_t* p = buff.data();
+			uint8_t* p = buff;
 
 			for(size_t i = 1; i < rm.m_col.size(); i++) // TODO: nparity > 1
 			{

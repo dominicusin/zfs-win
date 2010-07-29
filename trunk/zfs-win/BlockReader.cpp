@@ -33,6 +33,7 @@ namespace ZFS
 		m_indblkcount = m_indblksize / sizeof(blkptr_t);
 		m_size = (m_node.maxblkid + 1) * m_datablksize;
 		m_cache.id = -1;
+		m_cache.buff = (uint8_t*)_aligned_malloc(m_datablksize, 16);
 
 		ASSERT(m_node.nlevels > 0);
 		ASSERT(m_node.indblkshift >= 7);
@@ -48,14 +49,14 @@ namespace ZFS
 
 			lvl.resize(n);
 
-			memset(lvl.data(), 0, lvl.size() * sizeof(blkcol_t*));
+			memset(lvl.data(), 0, lvl.size() * sizeof(blkptr_t*));
 
 			n = (n + m_indblkcount - 1) / m_indblkcount;
 		}
 
-		blkcol_t* col = new blkcol_t(m_node.nblkptr);
+		blkptr_t* col = (blkptr_t*)_aligned_malloc(m_node.nblkptr * sizeof(blkptr_t), 16);
 
-		memcpy(col->data(), m_node.blkptr, m_node.nblkptr * sizeof(blkptr_t));
+		memcpy(col, m_node.blkptr, m_node.nblkptr * sizeof(blkptr_t));
 
 		m_tree.back()[0] = col;
 	}
@@ -66,9 +67,11 @@ namespace ZFS
 		{
 			for(auto j = i->begin(); j != i->end(); j++)
 			{
-				delete *j;
+				_aligned_free(*j);
 			}
 		}
+
+		_aligned_free(m_cache.buff);
 	}
 
 	size_t BlockReader::Read(void* dst, size_t size, uint64_t offset)
@@ -91,24 +94,36 @@ namespace ZFS
 
 			if(bp->type != DMU_OT_NONE)
 			{
-				if(m_cache.id != block_id)
+				// do not cache large contiguous reads
+
+				if(block_offset == 0 && m_datablksize <= size && ((UINT_PTR)ptr & 15) == 0)
 				{
-					if(!m_pool->Read(m_cache.buff, bp))
+					bytes = m_datablksize;
+
+					if(!m_pool->Read(ptr, bytes, bp))
 					{
 						break;
 					}
-
-					m_cache.id = block_id;
 				}
+				else
+				{
+					if(m_cache.id != block_id)
+					{
+						if(!m_pool->Read(m_cache.buff, m_datablksize, bp))
+						{
+							break;
+						}
 
-				ASSERT(m_cache.buff.size() == m_datablksize);
+						m_cache.id = block_id;
+					}
 
-				uint8_t* src = m_cache.buff.data() + block_offset;
-				size_t src_size = m_cache.buff.size() - block_offset;
+					uint8_t* src = m_cache.buff + block_offset;
+					size_t src_size = m_datablksize - block_offset;
 
-				bytes = std::min<size_t>(src_size, size);
+					bytes = std::min<size_t>(src_size, size);
 
-				memcpy(ptr, src, bytes);
+					memcpy(ptr, src, bytes);
+				}
 			}
 			else
 			{
@@ -156,7 +171,9 @@ namespace ZFS
 
 		size_t col_id = (size_t)(id >> (m_node.indblkshift - 7));
 
-		if(lvl[col_id] == NULL)
+		blkptr_t* col = lvl[col_id];
+
+		if(col == NULL)
 		{
 			blkptr_t* bp = NULL;
 
@@ -165,12 +182,14 @@ namespace ZFS
 				return false;
 			}
 
-			std::vector<uint8_t> buff;
+			col = (blkptr_t*)_aligned_malloc(m_indblksize, 16);
 
 			if(bp->type != DMU_OT_NONE)
 			{
-				if(!m_pool->Read(buff, bp) || buff.size() != m_indblksize)
+				if(!m_pool->Read((uint8_t*)col, m_indblksize, bp))
 				{
+					_aligned_free(col);
+
 					return false;
 				}
 			}
@@ -178,23 +197,15 @@ namespace ZFS
 			{
 				// FIXME: there may be empty pointers in the middle of other valid pointers (???)
 
-				buff.resize(m_indblksize);
-
-				memset(buff.data(), 0, m_indblksize);
+				memset(col, 0, m_indblksize);
 			}
-
-			blkcol_t* col = new blkcol_t(m_indblkcount);
-
-			memcpy(col->data(), buff.data(), buff.size()); // TODO: read into col->data() directly
 
 			lvl[col_id] = col;
 		}
 
-		blkcol_t* col = lvl[col_id];
-
 		uint64_t mask = (1ull << (m_node.indblkshift - 7)) - 1;
 
-		*bp = &col->at((size_t)(id & mask));
+		*bp = &col[(size_t)(id & mask)];
 
 		return true;
 	}

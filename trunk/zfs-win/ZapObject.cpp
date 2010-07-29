@@ -39,29 +39,35 @@ namespace ZFS
 	{
 		RemoveAll();
 
+		bool res = false;
+
 		BlockReader r(m_pool, dn);
 
 		size_t size = (size_t)r.GetDataSize();
 
 		if(size >= sizeof(uint64_t))
 		{
-			std::vector<uint8_t> buff(size);
+			uint8_t* buff = (uint8_t*)_aligned_malloc(size, 16);
 
-			if(r.Read(buff.data(), size, 0) == size)
+			if(r.Read(buff, size, 0) == size)
 			{
-				switch(*(uint64_t*)buff.data())
+				switch(*(uint64_t*)buff)
 				{
 				case ZBT_MICRO:
-					ParseMicro(buff);
-					return true;
+					ParseMicro(buff, size);
+					res = true;
+					break;
 				case ZBT_HEADER:
-					ParseFat(buff);
-					return true;
+					ParseFat(buff, size);
+					res = true;
+					break;
 				}
 			}
+
+			_aligned_free(buff);
 		}
 
-		return false;
+		return res;
 	}
 
 	bool ZapObject::Lookup(const char* name, uint64_t& value)
@@ -122,11 +128,11 @@ namespace ZFS
 		clear();
 	}
 
-	void ZapObject::ParseMicro(std::vector<uint8_t>& buff)
+	void ZapObject::ParseMicro(uint8_t* buff, size_t size)
 	{
-		mzap_phys_t* mzap = (mzap_phys_t*)buff.data();
+		mzap_phys_t* mzap = (mzap_phys_t*)buff;
 
-		for(size_t i = 0, n = buff.size() / MZAP_ENT_LEN - 1; i < n; i++)
+		for(size_t i = 0, n = size / MZAP_ENT_LEN - 1; i < n; i++)
 		{
 			std::string name = mzap->chunk[i].name;
 
@@ -151,23 +157,23 @@ namespace ZFS
 		}
 	}
 
-	void ZapObject::ParseFat(std::vector<uint8_t>& buff)
+	void ZapObject::ParseFat(uint8_t* buff, size_t size)
 	{
 		// NOTE: not sure about this, the documentation is outdated, 0x4000 granularity seems to work
 
-		ASSERT(buff.size() >= 0x8000 && (buff.size() & 0x3fff) == 0);
+		ASSERT(size >= 0x8000 && (size & 0x3fff) == 0);
 
-		if(buff.size() < 0x8000) 
+		if(size < 0x8000) 
 		{
 			return;
 		}
 
-		zap_phys_t* zap = (zap_phys_t*)buff.data(); // TODO: zap->ptrtbl ???
+		zap_phys_t* zap = (zap_phys_t*)buff; // TODO: zap->ptrtbl ???
 
-		size_t n = buff.size() / 0x4000 - 1;
+		size_t n = size / 0x4000 - 1;
 		size_t m = 0x4000 - offsetof(zap_leaf_phys_t, hash[0x4000 / 32]);
 
-		uint8_t* ptr = buff.data() + 0x4000;
+		uint8_t* ptr = buff + 0x4000;
 
 		for(size_t i = 0; i < n; i++, ptr += 0x4000)
 		{

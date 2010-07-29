@@ -31,7 +31,7 @@ namespace ZFS
 	class ObjectSet
 	{
 		Pool* m_pool;
-		std::vector<uint8_t> m_objset;
+		objset_phys_t m_objset;
 		std::map<uint64_t, ZapObject*> m_objdir;
 		std::map<uint64_t, dnode_phys_t> m_cache;
 		BlockReader* m_reader;
@@ -52,6 +52,6 @@ namespace ZFS
 		bool Read(uint64_t index, ZapObject** zap, dmu_object_type type = DMU_OT_NONE);
 		bool Read(uint64_t index, NameValueList& nvl);
 
-		objset_phys_t* operator -> () {return (objset_phys_t*)m_objset.data();}
+		const objset_phys_t* operator -> () {return &m_objset;}
 	};
 }
