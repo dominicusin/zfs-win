@@ -117,11 +117,7 @@ namespace ZFS
 
 		auto i = m_cache.find(index);
 
-		if(i != m_cache.end())
-		{
-			*dn = i->second;
-		}
-		else
+		if(i == m_cache.end())
 		{
 			size_t size = sizeof(dnode_phys_t);
 
@@ -136,6 +132,10 @@ namespace ZFS
 			{
 				m_cache[index] = *dn;
 			}
+		}
+		else
+		{
+			*dn = i->second;
 		}
 
 		return type == DMU_OT_NONE || dn->type == type;
