@@ -47,7 +47,7 @@ namespace ZFS
 		std::vector<VirtualDevice> children;
 
 		void Init(NameValueList* nvl);
-		bool Read(std::vector<uint8_t>& buff, size_t size, uint64_t offset);
+		bool Read(uint8_t* buff, size_t size, uint64_t offset);
 		VirtualDevice* Find(uint64_t guid_to_find);
 		void GetLeaves(std::list<VirtualDevice*>& leaves);
 	};

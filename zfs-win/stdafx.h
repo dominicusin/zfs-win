@@ -45,6 +45,7 @@
 #include <string>
 #include <memory>
 #include <algorithm>
+#include <emmintrin.h>
 
 #ifndef ASSERT
  #if defined(_DEBUG) && defined(_MSC_VER)

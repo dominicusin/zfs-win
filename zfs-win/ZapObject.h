@@ -30,8 +30,8 @@ namespace ZFS
 		Pool* m_pool;
 
 		void RemoveAll();
-		void ParseMicro(std::vector<uint8_t>& buff);
-		void ParseFat(std::vector<uint8_t>& buff);
+		void ParseMicro(uint8_t* buff, size_t size);
+		void ParseFat(uint8_t* buff, size_t size);
 		bool ParseArray(std::vector<uint8_t>& buff, zap_leaf_entry_t* e, uint16_t index);
 
 	public:

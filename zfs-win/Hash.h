@@ -128,10 +128,7 @@
 #include "stdafx.h"
 #include "zfs.h"
 
-extern void fletcher_2_native(const void* buf, uint64_t size, cksum_t* zcp);
-extern void fletcher_2_byteswap(const void* buf, uint64_t size, cksum_t* zcp);
-extern void fletcher_4_native(const void* buf, uint64_t size, cksum_t* zcp);
-extern void fletcher_4_byteswap(const void* buf, uint64_t size, cksum_t* zcp);
-extern void fletcher_4_incremental_native(const void* buf, uint64_t size, cksum_t* zcp);
-extern void fletcher_4_incremental_byteswap(const void* buf, uint64_t size, cksum_t* zcp);
-extern void sha256(const void* buf, uint64_t size, cksum_t* zcp);
+namespace ZFS
+{
+	extern void hash(const void* buf, uint64_t size, cksum_t* zcp, uint8_t cksum_type);
+}
