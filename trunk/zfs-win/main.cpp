@@ -97,7 +97,7 @@ namespace ZFS
 			
 			s += Util::UTF8To16(ds->m_name.c_str());
 
-			// wprintf(L"[%d] %s\n", clock(), s.c_str());
+			wprintf(L"%s\n", s.c_str());
 
 			for(auto i = ds->m_children.begin(); i != ds->m_children.end(); i++)
 			{
@@ -136,7 +136,7 @@ namespace ZFS
 	{
 		Context* ctx = (Context*)DokanFileInfo->DokanOptions->GlobalContext;
 
-		// wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
+		// wprintf(L"[%d] %s: %s %d\n", clock(), __FUNCTIONW__, FileName, CreationDisposition);
 
 		std::wstring fn = FileName;
 
@@ -260,9 +260,11 @@ namespace ZFS
 	{
 		Context* ctx = (Context*)DokanFileInfo->DokanOptions->GlobalContext;
 
-		// wprintf(L"%[%d] %s: %s %d %I64d\n", clock(), __FUNCTIONW__, FileName, BufferLength, Offset);
+		// wprintf(L"[%d] %s: %s %d %I64d\n", clock(), __FUNCTIONW__, FileName, BufferLength, Offset);
 
 		FileContext* fctx = (FileContext*)DokanFileInfo->Context;
+
+		if(fctx == NULL) return -ERROR_INVALID_HANDLE;
 
 		znode_phys_t* znode = (znode_phys_t*)fctx->node.bonus();
 
@@ -314,6 +316,8 @@ namespace ZFS
 		// wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
 
 		FileContext* fctx = (FileContext*)DokanFileInfo->Context;
+
+		if(fctx == NULL) return -ERROR_INVALID_HANDLE;
 
 		znode_phys_t* node = (znode_phys_t*)fctx->node.bonus();
 

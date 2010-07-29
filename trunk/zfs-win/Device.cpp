@@ -59,7 +59,7 @@ namespace ZFS
 	bool VirtualDevice::Read(uint8_t* buff, size_t size, uint64_t offset)
 	{
 		// TODO: handle chksum errors
-		// TODO: parallel reads with overlapped i/o
+		// TODO: read recursively to allow nested vdevs
 
 		if(type == "disk" || type == "file")
 		{
