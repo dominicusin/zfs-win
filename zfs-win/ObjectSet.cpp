@@ -154,6 +154,33 @@ namespace ZFS
 				return false;
 			}
 
+			switch(dn.type)
+			{
+			case DMU_OT_OBJECT_DIRECTORY:
+			case DMU_OT_DSL_DIR_CHILD_MAP:
+			case DMU_OT_DSL_DS_SNAP_MAP:
+			case DMU_OT_DSL_PROPS:
+			case DMU_OT_DIRECTORY_CONTENTS:
+			case DMU_OT_MASTER_NODE:
+			case DMU_OT_UNLINKED_SET:
+			case DMU_OT_ZVOL_PROP:
+			case DMU_OT_ZAP_OTHER:
+			case DMU_OT_ERROR_LOG:
+			case DMU_OT_POOL_PROPS:
+			case DMU_OT_DSL_PERMS:
+			case DMU_OT_NEXT_CLONES:
+			case DMU_OT_SCRUB_QUEUE:
+			case DMU_OT_USERGROUP_USED:
+			case DMU_OT_USERGROUP_QUOTA:
+			case DMU_OT_USERREFS:
+			case DMU_OT_DDT_ZAP:
+			case DMU_OT_DDT_STATS:
+				break;
+			default:
+				printf("Not a known ZAP object (dn.type = %d)\n", dn.type);
+				return false;
+			}
+
 			*zap = new ZapObject(m_pool);
 
 			if(!(*zap)->Init(&dn))

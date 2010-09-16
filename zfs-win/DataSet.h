@@ -51,5 +51,6 @@ namespace ZFS
 		void GetMountPoints(std::list<DataSet*>& mpl);
 		bool Find(const wchar_t* path, DataSet** ds);
 		bool Find(const wchar_t* path, dnode_phys_t& dn);
+		void Test(uint64_t index = 0);
 	};
 }
