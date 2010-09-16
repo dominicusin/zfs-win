@@ -176,33 +176,28 @@ namespace ZFS
 
 				if(vdev->id == addr->vdev)
 				{
-					if(bp->comp_type == ZIO_COMPRESS_OFF)
+					BYTE* ptr = src != NULL ? src : dst;
+
+					if(vdev->Read(ptr, psize, addr->offset << 9))
 					{
-						if(vdev->Read(dst, psize, addr->offset << 9))
+						if(Verify(ptr, psize, bp->cksum_type, bp->cksum))
 						{
-							if(Verify(dst, psize, bp->cksum_type, bp->cksum))
+							if(ptr != src || ZFS::decompress(ptr, dst, psize, lsize, bp->comp_type))
 							{
 								succeeded = true;
-
-								break;
 							}
+						}
+						else
+						{
+							printf("cksum error (vdev=%I64d offset=%I64d)\n", vdev->id, addr->offset << 9);
 						}
 					}
 					else
 					{
-						if(vdev->Read(src, psize, addr->offset << 9))
-						{
-							if(Verify(src, psize, bp->cksum_type, bp->cksum))
-							{
-								if(ZFS::decompress(src, dst, psize, lsize, bp->comp_type))
-								{
-									succeeded = true;
-
-									break;
-								}
-							}
-						}
+						printf("cannot read device (vdev=%I64d offset=%I64d)\n", vdev->id, addr->offset << 9);
 					}
+
+					break;
 				}
 			}
 		}
@@ -218,7 +213,7 @@ namespace ZFS
 
 		ZFS::hash(buff, size, &c, cksum_type);
 
-		ASSERT(cksum == c);
+		// ASSERT(cksum == c);
 
 		return cksum == c;
 	}

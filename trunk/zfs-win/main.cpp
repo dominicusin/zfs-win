@@ -111,19 +111,28 @@ namespace ZFS
 	public:
 		dnode_phys_t node;
 		BlockReader reader;
+		std::wstring name;
 	
-		FileContext(Pool* pool, dnode_phys_t* dn)
+		FileContext(Pool* pool, dnode_phys_t* dn, const wchar_t* n)
 			: node(*dn)
 			, reader(pool, dn)
+			, name(n)
 		{
 		}
 	};
 
-	static void UnixTimeToFileTime(uint64_t t, FILETIME* pft)
+	void UnixTimeToFileTime(uint64_t t, FILETIME* pft)
 	{
 		// http://support.microsoft.com/kb/167296
      
 		*(uint64_t*)pft = (t * 10000000) + 116444736000000000ull;
+	}
+
+	void UnixTimeToSystemTime(uint64_t t, SYSTEMTIME* st)
+	{
+		FILETIME ft;
+		UnixTimeToFileTime(t, &ft);
+		FileTimeToSystemTime(&ft, st);
 	}
 
 	static int WINAPI CreateFile(
@@ -174,7 +183,7 @@ namespace ZFS
 			DokanFileInfo->IsDirectory = 1;
 		}
 
-		DokanFileInfo->Context = (ULONG64)new FileContext(&ctx->m_pool, &dn);
+		DokanFileInfo->Context = (ULONG64)new FileContext(&ctx->m_pool, &dn, fn.c_str());
 
 		return CreationDisposition == OPEN_ALWAYS ? ERROR_ALREADY_EXISTS : 0;
 	}
@@ -198,7 +207,7 @@ namespace ZFS
 			return -ERROR_PATH_NOT_FOUND;
 		}
 
-		DokanFileInfo->Context = (ULONG64)new FileContext(&ctx->m_pool, &dn);
+		DokanFileInfo->Context = (ULONG64)new FileContext(&ctx->m_pool, &dn, fn.c_str());
 
 		return 0;
 	}
@@ -220,15 +229,15 @@ namespace ZFS
 	{
 		Context* ctx = (Context*)DokanFileInfo->DokanOptions->GlobalContext;
 
-		// wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
-
+		// wprintf(L"[%d] %s: %s %s\n", clock(), __FUNCTIONW__, FileName, DokanFileInfo->Context != 0 ? ((FileContext*)DokanFileInfo->Context)->name.c_str() : L"NULL");
+		
 		if(DokanFileInfo->Context != 0)
 		{
 			delete (FileContext*)DokanFileInfo->Context;
 
 			DokanFileInfo->Context = 0;
 		}
-
+		
 		return 0;
 	}
 
@@ -238,7 +247,7 @@ namespace ZFS
 	{
 		Context* ctx = (Context*)DokanFileInfo->DokanOptions->GlobalContext;
 
-		// wprintf(L"[%d] %s: %s\n", clock(), __FUNCTIONW__, FileName);
+		// wprintf(L"[%d] %s: %s %s\n", clock(), __FUNCTIONW__, FileName, DokanFileInfo->Context != 0 ? ((FileContext*)DokanFileInfo->Context)->name.c_str() : L"NULL");
 
 		if(DokanFileInfo->Context != 0)
 		{
@@ -691,10 +700,89 @@ static void usage()
 		"  zfs-win.exe mount m \"rpool/ROOT/opensolaris\" \"\\\\.\\PhysicalDrive1\" \"\\\\.\\PhysicalDrive2\"\n"
 		"  zfs-win.exe list \"Virtual Machine-flat.vmdk\"\n"
 		);
+
+	// TODO: 
+	// list uberblocks
+	// mount specific uberblock
+	// read test
+	// overwrite uberblock magic number to rollback to earlier state
+}
+
+static void repair()
+{
+	HANDLE handle[4];
+	uint64_t size[4];
+	LARGE_INTEGER li, li2;
+	DWORD n;
+	static vdev_label_t label[4][4];
+
+	memset(label, 0, sizeof(label));
+
+	for(int i = 0; i < 4; i++)
+	{
+		std::wstring s = Util::Format(L"\\\\.\\PhysicalDrive%d", i + 1);
+
+		handle[i] = CreateFile(s.c_str(), GENERIC_WRITE | GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, (HANDLE)NULL);
+
+		if(handle[i] == INVALID_HANDLE_VALUE)
+		{
+			return;
+		}
+
+		if(!GetFileSizeEx(handle[i], (LARGE_INTEGER*)&size[i]))
+		{
+			DISK_GEOMETRY_EX dg;
+			DWORD sz;
+		
+			if(DeviceIoControl(handle[i], IOCTL_DISK_GET_DRIVE_GEOMETRY_EX, NULL, 0, &dg, sizeof(dg), &sz, NULL))
+			{
+				size[i] = dg.DiskSize.QuadPart;
+			}
+		}
+
+		li.QuadPart = 0;
+		SetFilePointerEx(handle[i], li, &li2, FILE_BEGIN);
+		ReadFile(handle[i], &label[i][0], sizeof(vdev_label_t), &n, NULL);
+		ReadFile(handle[i], &label[i][1], sizeof(vdev_label_t), &n, NULL);
+
+		li.QuadPart = size[i] - sizeof(vdev_label_t) * 2 - 0x26000;
+		SetFilePointerEx(handle[i], li, &li2, FILE_BEGIN);
+		ReadFile(handle[i], &label[i][2], sizeof(vdev_label_t), &n, NULL);
+		ReadFile(handle[i], &label[i][3], sizeof(vdev_label_t), &n, NULL);
+	}
+
+	for(int i = 0; i < 4; i++)
+	{
+		for(int j = 0; j < 4; j++)
+		{
+			uberblock_t* ub = (uberblock_t*)&label[j][i].uberblock[8 << 10];
+
+			ub->magic = 0;
+
+			printf("%d\n", ub->txg);
+		}
+	}
+
+	for(int i = 0; i < 4; i++)
+	{
+		li.QuadPart = 0;
+		SetFilePointerEx(handle[i], li, &li2, FILE_BEGIN);
+		WriteFile(handle[i], &label[i][0], sizeof(vdev_label_t), &n, NULL);
+		WriteFile(handle[i], &label[i][1], sizeof(vdev_label_t), &n, NULL);
+
+		li.QuadPart = size[i] - sizeof(vdev_label_t) * 2 - 0x26000;
+		SetFilePointerEx(handle[i], li, &li2, FILE_BEGIN);
+		WriteFile(handle[i], &label[i][2], sizeof(vdev_label_t), &n, NULL);
+		WriteFile(handle[i], &label[i][3], sizeof(vdev_label_t), &n, NULL);
+
+		CloseHandle(handle[i]);
+	}
 }
 
 int _tmain(int argc, _TCHAR* argv[])
 {
+	// repair(); return -1;
+
 	if(argc < 2) {usage(); return -1;}
 
 	wchar_t drive = 0;

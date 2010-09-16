@@ -288,13 +288,25 @@ namespace ZFS
 				continue;
 			}
 
+			zio_eck_t* eck = (zio_eck_t*)&m_label->uberblock[i + m_desc.ub_size] - 1;
+/*
+
+extern void UnixTimeToSystemTime(uint64_t t, SYSTEMTIME* st);
+
+SYSTEMTIME st;
+UnixTimeToSystemTime(ub->timestamp, &st);
+
+printf("%d %I64d (%d-%02d-%02d %d:%02d:%02d)\n", 
+	i / m_desc.ub_size, ub->txg, 
+	st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond); 
+*/
 			if(m_active == NULL || ub->txg > m_active->txg)
 			{
 				m_active = ub;
 			}
 		}
 
-		return true;
+		return m_active != NULL;
 	}
 
 	void Device::Close()

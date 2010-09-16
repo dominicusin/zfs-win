@@ -92,6 +92,8 @@ namespace ZFS
 			zap->Lookup("mountpoint", m_mountpoint);
 		}
 
+		// Test();
+
 		if(os.Read(m_dir.child_dir_zapobj, &zap, DMU_OT_DSL_DIR_CHILD_MAP))
 		{
 			for(auto i = zap->begin(); i != zap->end(); i++)
@@ -267,5 +269,73 @@ namespace ZFS
 		}
 
 		return true;
+	}
+
+	void DataSet::Test(uint64_t index)
+	{
+		if(m_head == NULL) 
+		{
+			return;
+		}
+
+		if(index == 0)
+		{
+			index = m_head->GetIndex("ROOT", 1);
+		}
+
+		ZapObject* zap = NULL;
+
+		if(m_head->Read(ZFS_DIRENT_OBJ(index), &zap))
+		{
+			for(auto i = zap->begin(); i != zap->end(); i++)
+			{
+				// printf("[%I64d] %s\n", ZFS_DIRENT_OBJ(index), i->first.c_str());
+
+				if(zap->Lookup(i->first.c_str(), index))
+				{
+					dnode_phys_t dn;
+
+					if(m_head->Read(ZFS_DIRENT_OBJ(index), &dn))
+					{
+						if(dn.type == DMU_OT_DIRECTORY_CONTENTS)
+						{
+							Test(index);
+						}
+						else if(dn.type == DMU_OT_PLAIN_FILE_CONTENTS)
+						{
+							BlockReader r(m_pool, &dn);
+
+							uint64_t size = r.GetDataSize(); // TODO: znode size? 
+
+							size_t datablksize = dn.datablkszsec << 9;
+
+							uint8_t* buff = (uint8_t*)_aligned_malloc(datablksize, 16);
+
+							for(uint64_t offset = 0; offset < size; offset += datablksize)
+							{
+								if(!r.Read(buff, std::min<uint64_t>(size - offset, datablksize), offset))
+								{
+									printf("read error at %I64d / %I64d (%d) (%s)\n", offset, size, datablksize, i->first.c_str());
+
+									break;
+								}
+							}
+
+							_aligned_free(buff);
+						}
+					}
+					else
+					{
+						printf("cannot read dnode %I64d\n", ZFS_DIRENT_OBJ(index));
+					}
+
+					fflush(stdout);
+				}
+			}
+		}
+		else
+		{
+			printf("cannot read zap %I64d\n", ZFS_DIRENT_OBJ(index));
+		}
 	}
 }
