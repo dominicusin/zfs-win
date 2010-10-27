@@ -271,7 +271,7 @@ namespace ZFS
 		return true;
 	}
 
-	void DataSet::Test(uint64_t index)
+	void DataSet::Test(uint64_t index, const char* path)
 	{
 		if(m_head == NULL) 
 		{
@@ -289,20 +289,22 @@ namespace ZFS
 		{
 			for(auto i = zap->begin(); i != zap->end(); i++)
 			{
-				// printf("[%I64d] %s\n", ZFS_DIRENT_OBJ(index), i->first.c_str());
-
 				if(zap->Lookup(i->first.c_str(), index))
 				{
+					std::string err;
+
 					dnode_phys_t dn;
 
 					if(m_head->Read(ZFS_DIRENT_OBJ(index), &dn))
 					{
 						if(dn.type == DMU_OT_DIRECTORY_CONTENTS)
 						{
-							Test(index);
+							Test(index, (std::string(path) + "/" + i->first).c_str());
 						}
 						else if(dn.type == DMU_OT_PLAIN_FILE_CONTENTS)
 						{
+							znode_phys_t* znode = (znode_phys_t*)dn.bonus();
+
 							BlockReader r(m_pool, &dn);
 
 							uint64_t size = r.GetDataSize(); // TODO: znode size? 
@@ -315,7 +317,7 @@ namespace ZFS
 							{
 								if(!r.Read(buff, std::min<uint64_t>(size - offset, datablksize), offset))
 								{
-									printf("read error at %I64d / %I64d (%d) (%s)\n", offset, size, datablksize, i->first.c_str());
+									err = Util::Format("read error at %I64d / %I64d (%d) (%s)", offset, size, datablksize, i->first.c_str());
 
 									break;
 								}
@@ -326,10 +328,15 @@ namespace ZFS
 					}
 					else
 					{
-						printf("cannot read dnode %I64d\n", ZFS_DIRENT_OBJ(index));
+						err = Util::Format("cannot read dnode %I64d", ZFS_DIRENT_OBJ(index));
 					}
 
-					fflush(stdout);
+					if(!err.empty())
+					{
+						printf("[%I64d] %s/%s\n%s\n", ZFS_DIRENT_OBJ(index), path, i->first.c_str(), err.c_str());
+
+						fflush(stdout);
+					}
 				}
 			}
 		}

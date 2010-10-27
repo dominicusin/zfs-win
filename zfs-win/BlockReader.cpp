@@ -160,7 +160,24 @@ namespace ZFS
 			block_offset = 0;
 		}
 
-		ASSERT(size == 0); 
+		if(size > 0)
+		{
+			if(m_node.type == DMU_OT_PLAIN_FILE_CONTENTS)
+			{
+				// file size may be larger than the allocated size when there are empty blocks at the end
+
+				printf("end of file is unallocated, returning empty data (%d bytes)\n", size);
+
+				memset(ptr, 0, size);
+
+				ptr += size;
+				size = 0;
+			}
+			else
+			{
+				ASSERT(0);
+			}
+		}
 
 		return ptr - (uint8_t*)dst;
 	}
