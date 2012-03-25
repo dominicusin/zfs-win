@@ -213,6 +213,8 @@ namespace ZFS
 
 		if(m_handle == INVALID_HANDLE_VALUE)
 		{
+			wprintf(L"Cannot open device %s\n", path);
+
 			m_handle = NULL;
 
 			return false;
@@ -228,6 +230,13 @@ namespace ZFS
 				m_size = dg.DiskSize.QuadPart;
 			}
 		}
+
+		if(wcsstr(path, L".vdi") != NULL)
+		{
+			m_start += 0x2000;
+			m_size -= 0x2000;
+		}
+		else
 
 		for(int i = 0; i < 2; i++, partition >>= 8)
 		{
