@@ -693,11 +693,11 @@ static void usage()
 		"ZFS for Windows\n"
 		"\n"
 		"usage:\n"
-		"  mount <drive> <dataset> <pool ..>\n"
+		"  mount <mountpoint> <dataset> <pool ..>\n"
 		"  list <pool ..>\n"
 		"\n"
 		"examples:\n"
-		"  zfs-win.exe mount m \"rpool/ROOT/opensolaris\" \"\\\\.\\PhysicalDrive1\" \"\\\\.\\PhysicalDrive2\"\n"
+		"  zfs-win.exe mount \"m:\\\" \"rpool/ROOT/opensolaris\" \"\\\\.\\PhysicalDrive1\" \"\\\\.\\PhysicalDrive2\"\n"
 		"  zfs-win.exe list \"Virtual Machine-flat.vmdk\"\n"
 		);
 
@@ -785,7 +785,7 @@ int _tmain(int argc, _TCHAR* argv[])
 
 	if(argc < 2) {usage(); return -1;}
 
-	wchar_t drive = 0;
+	std::wstring mp;
 	std::list<std::wstring> paths;
 	std::wstring pool;
 	std::wstring  dataset;
@@ -795,7 +795,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	{
 		if(argc < 5) {usage(); return -1;}
 
-		drive = argv[2][0];
+		mp = argv[2];
 
 		std::list<std::wstring> sl;
 
@@ -864,10 +864,11 @@ int _tmain(int argc, _TCHAR* argv[])
 
 	memset(&options, 0, sizeof(DOKAN_OPTIONS));
 
-	options.DriveLetter = drive;
+	options.Version = DOKAN_VERSION;
 	options.GlobalContext = (ULONG64)&ctx;
 	options.ThreadCount = 1; // TODO
 	options.Options = DOKAN_OPTION_KEEP_ALIVE;
+	options.MountPoint = mp.c_str();
 
 	#ifdef _DEBUG
 
